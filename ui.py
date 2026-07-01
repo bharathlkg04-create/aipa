@@ -303,9 +303,9 @@ _HTML = """<!DOCTYPE html>
                   placeholder="You are a helpful assistant for {business name}. Answer questions about our products and services."></textarea>
       </div>
     </div>
-    <button class="setup-btn" onclick="setupBot()">⚡ Setup &amp; Connect</button>
-    <div style="margin-top:8px; font-size:11px; color:#475569;">
-      First request on the free tier may take up to 60 seconds while the server wakes up.
+    <button type="button" class="setup-btn" id="setup-btn" onclick="setupBot()">⚡ Setup &amp; Connect</button>
+    <div style="margin-top:8px; font-size:11px; color:#475569;" id="setup-hint">
+      <span id="server-hint-text">First request on the free tier may take up to 60 seconds while the server wakes up.</span>
     </div>
     <div id="setup-result" class="setup-result" style="display:none;"></div>
   </div>
@@ -345,12 +345,12 @@ _HTML = """<!DOCTYPE html>
       <input id="bot-token-input" placeholder="Bot token (e.g. 7123456789:AAF...)"
              style="flex:1; min-width:220px; background:#0f1117; border:1px solid #2d3148;
                     border-radius:8px; padding:9px 14px; color:#e2e8f0; font-size:13px; outline:none;" />
-      <button class="copy-btn" onclick="generateWebhook()">Generate</button>
+      <button type="button" class="copy-btn" onclick="generateWebhook()">Generate</button>
     </div>
     <div class="webhook-url" id="webhook-url">— enter bot token above —</div>
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <button class="copy-btn" onclick="copyWebhook()">📋 Copy URL</button>
-      <button class="copy-btn" onclick="registerWebhook()" style="background:#059669;">⚡ Register Webhook</button>
+      <button type="button" class="copy-btn" onclick="copyWebhook()">📋 Copy URL</button>
+      <button type="button" class="copy-btn" onclick="registerWebhook()" style="background:#059669;">⚡ Register Webhook</button>
       <span id="copy-msg" style="font-size:12px; color:#4ade80; opacity:0; transition:opacity 0.3s;">Copied!</span>
     </div>
     <div id="register-result" style="font-size:12px; margin-top:10px; font-family:monospace; min-height:18px;"></div>
@@ -366,7 +366,7 @@ _HTML = """<!DOCTYPE html>
         <option>POST</option>
       </select>
       <input id="sim-path" value="/health" placeholder="/health" />
-      <button class="sim-btn" onclick="sendRequest()">Send</button>
+      <button type="button" class="sim-btn" onclick="sendRequest()">Send</button>
     </div>
     <div class="sim-result" id="sim-result">Response will appear here…</div>
   </div>
@@ -380,6 +380,7 @@ _HTML = """<!DOCTYPE html>
 
   // ── Health check ──
   let _healthFails = 0;
+  let _serverOk = false;
   async function checkHealth() {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 7000);
@@ -388,8 +389,9 @@ _HTML = """<!DOCTYPE html>
       clearTimeout(timer);
       const d = await r.json();
       _healthFails = 0;
+      _serverOk = d.status === 'healthy';
       document.getElementById('server-status').innerHTML =
-        d.status === 'healthy'
+        _serverOk
           ? '<span class="badge badge-green"><span class="dot"></span>Healthy</span>'
           : '<span class="badge badge-red"><span class="dot"></span>Degraded</span>';
       document.getElementById('db-status').innerHTML =
@@ -397,9 +399,11 @@ _HTML = """<!DOCTYPE html>
           ? '<span class="badge badge-green"><span class="dot"></span>Connected</span>'
           : '<span class="badge badge-red"><span class="dot"></span>Unreachable</span>';
       document.getElementById('server-env').textContent = 'env: ' + (d.environment || '—');
+      document.getElementById('setup-hint').textContent = '';
     } catch {
       clearTimeout(timer);
       _healthFails++;
+      _serverOk = false;
       const waking = _healthFails <= 6;
       document.getElementById('server-status').innerHTML = waking
         ? '<span class="badge badge-yellow"><span class="dot"></span>Waking up…</span>'
@@ -407,6 +411,9 @@ _HTML = """<!DOCTYPE html>
       document.getElementById('db-status').innerHTML = waking
         ? '<span class="badge badge-yellow"><span class="dot"></span>Waiting…</span>'
         : '<span class="badge badge-red"><span class="dot"></span>Unknown</span>';
+      document.getElementById('server-hint-text').textContent = waking
+        ? '⏳ Server is waking up — you can still click Setup, it will wait.'
+        : '❌ Server appears offline. Try refreshing the page.';
       if (waking) document.getElementById('server-env').textContent = 'Free tier: waking up (up to 60s)';
     }
   }
@@ -421,6 +428,7 @@ _HTML = """<!DOCTYPE html>
   }
 
   async function setupBot() {
+    console.log('[setupBot] called');
     const token  = document.getElementById('s-token').value.trim();
     const apikey = document.getElementById('s-apikey').value.trim();
     const selEl  = document.getElementById('s-model');
@@ -429,18 +437,16 @@ _HTML = """<!DOCTYPE html>
       : selEl.value;
     const name   = document.getElementById('s-name').value.trim() || 'My Business';
     const prompt = document.getElementById('s-prompt').value.trim() || null;
-    const el     = document.getElementById('setup-result');
 
     if (!token)  { showSetupResult('error', 'Bot token is required.'); return; }
     if (!apikey) { showSetupResult('error', 'LLM API key is required.'); return; }
     if (!model)  { showSetupResult('error', 'Model is required.'); return; }
 
-    const btn = document.querySelector('.setup-btn');
+    const btn = document.getElementById('setup-btn');
     btn.disabled = true;
     btn.textContent = 'Connecting…';
     showSetupResult('ok', 'Connecting — if the server is waking up this may take up to 60 seconds…');
 
-    // countdown so the user knows something is happening
     let secs = 0;
     const ticker = setInterval(() => {
       secs++;
@@ -448,23 +454,26 @@ _HTML = """<!DOCTYPE html>
     }, 1000);
 
     try {
+      console.log('[setupBot] sending POST /api/setup');
       const r = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bot_token: token, api_key: apikey, model, business_name: name, system_prompt: prompt }),
       });
       const d = await r.json();
+      console.log('[setupBot] response', r.status, d);
       if (r.ok && d.ok) {
         showSetupResult('ok',
-          '✓ Connected!\n\nBusiness ID: ' + d.business_id + '\nWebhook URL: ' + d.webhook_url
+          '✓ Connected!\n\nBusiness ID: ' + d.business_id + '\nWebhook: ' + d.webhook_url
         );
         document.getElementById('bot-token-input').value = token;
         generateWebhook();
       } else {
-        showSetupResult('error', 'Error: ' + (d.detail || JSON.stringify(d)));
+        showSetupResult('error', 'Setup failed (HTTP ' + r.status + '): ' + (d.detail || JSON.stringify(d)));
       }
     } catch (e) {
-      showSetupResult('error', 'Error: ' + e.message);
+      console.error('[setupBot] error', e);
+      showSetupResult('error', 'Network error: ' + e.message + '\n\nIf the server is sleeping, wait 30–60 s and try again.');
     } finally {
       clearInterval(ticker);
       btn.disabled = false;
