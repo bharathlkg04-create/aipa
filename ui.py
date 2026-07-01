@@ -304,6 +304,9 @@ _HTML = """<!DOCTYPE html>
       </div>
     </div>
     <button class="setup-btn" onclick="setupBot()">⚡ Setup &amp; Connect</button>
+    <div style="margin-top:8px; font-size:11px; color:#475569;">
+      First request on the free tier may take up to 60 seconds while the server wakes up.
+    </div>
     <div id="setup-result" class="setup-result" style="display:none;"></div>
   </div>
 
@@ -376,10 +379,15 @@ _HTML = """<!DOCTYPE html>
   document.getElementById('base-url').textContent = origin;
 
   // ── Health check ──
+  let _healthFails = 0;
   async function checkHealth() {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 7000);
     try {
-      const r = await fetch('/health');
+      const r = await fetch('/health', { signal: ctrl.signal });
+      clearTimeout(timer);
       const d = await r.json();
+      _healthFails = 0;
       document.getElementById('server-status').innerHTML =
         d.status === 'healthy'
           ? '<span class="badge badge-green"><span class="dot"></span>Healthy</span>'
@@ -390,14 +398,20 @@ _HTML = """<!DOCTYPE html>
           : '<span class="badge badge-red"><span class="dot"></span>Unreachable</span>';
       document.getElementById('server-env').textContent = 'env: ' + (d.environment || '—');
     } catch {
-      document.getElementById('server-status').innerHTML =
-        '<span class="badge badge-red"><span class="dot"></span>Offline</span>';
-      document.getElementById('db-status').innerHTML =
-        '<span class="badge badge-red"><span class="dot"></span>Unknown</span>';
+      clearTimeout(timer);
+      _healthFails++;
+      const waking = _healthFails <= 6;
+      document.getElementById('server-status').innerHTML = waking
+        ? '<span class="badge badge-yellow"><span class="dot"></span>Waking up…</span>'
+        : '<span class="badge badge-red"><span class="dot"></span>Offline</span>';
+      document.getElementById('db-status').innerHTML = waking
+        ? '<span class="badge badge-yellow"><span class="dot"></span>Waiting…</span>'
+        : '<span class="badge badge-red"><span class="dot"></span>Unknown</span>';
+      if (waking) document.getElementById('server-env').textContent = 'Free tier: waking up (up to 60s)';
     }
   }
   checkHealth();
-  setInterval(checkHealth, 10000);
+  setInterval(checkHealth, 8000);
 
   // ── Bot Setup ──
   function onModelChange() {
@@ -424,7 +438,14 @@ _HTML = """<!DOCTYPE html>
     const btn = document.querySelector('.setup-btn');
     btn.disabled = true;
     btn.textContent = 'Connecting…';
-    el.style.display = 'none';
+    showSetupResult('ok', 'Connecting — if the server is waking up this may take up to 60 seconds…');
+
+    // countdown so the user knows something is happening
+    let secs = 0;
+    const ticker = setInterval(() => {
+      secs++;
+      if (btn.disabled) btn.textContent = 'Connecting… ' + secs + 's';
+    }, 1000);
 
     try {
       const r = await fetch('/api/setup', {
@@ -445,6 +466,7 @@ _HTML = """<!DOCTYPE html>
     } catch (e) {
       showSetupResult('error', 'Error: ' + e.message);
     } finally {
+      clearInterval(ticker);
       btn.disabled = false;
       btn.textContent = '⚡ Setup & Connect';
     }
