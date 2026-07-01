@@ -375,8 +375,8 @@ _HTML = """<!DOCTYPE html>
 </div>
 
 <script>
-  // JS running — update footer so we can see it
-  document.getElementById('footer').textContent = 'AI\'PA v1 · JS ✓ · ' + new Date().toLocaleTimeString();
+  // JS running — update footer to confirm script loaded
+  document.getElementById('footer').textContent = "AI'PA v1 · JS OK · " + new Date().toLocaleTimeString();
 
   const origin = window.location.origin;
   document.getElementById('base-url').textContent = origin;
