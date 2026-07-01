@@ -4,8 +4,8 @@ services:
     env: python
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn aipa.main:app --host 0.0.0.0 --port $PORT --workers 1
+    buildCommand: pip install -r requirements.txt && pip install .
+    startCommand: uvicorn aipa.main:app --host 0.0.0.0 --port $PORT --workers 1 --loop uvloop
     healthCheckPath: /health/live
     envVars:
       - key: SUPABASE_DB_URL
