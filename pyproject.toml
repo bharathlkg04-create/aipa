@@ -15,5 +15,6 @@ packages = [
     "aipa.agent",
     "aipa.conversations",
     "aipa.core",
+    "aipa.setup",
     "aipa.telegram",
 ]

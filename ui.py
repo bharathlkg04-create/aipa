@@ -183,6 +183,67 @@ _HTML = """<!DOCTYPE html>
       word-break: break-all;
     }
 
+    /* ── Setup box ── */
+    .setup-box {
+      background: #1e2130;
+      border: 1px solid #2d3148;
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 24px;
+    }
+    .setup-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #64748b;
+    }
+    .setup-box input, .setup-box select, .setup-box textarea {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 9px 14px;
+      color: #e2e8f0;
+      font-size: 13px;
+      outline: none;
+      font-family: inherit;
+      resize: vertical;
+    }
+    .setup-box input:focus, .setup-box select:focus, .setup-box textarea:focus {
+      border-color: #6366f1;
+    }
+    .setup-btn {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border: none;
+      padding: 10px 26px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .setup-btn:hover { opacity: 0.88; }
+    .setup-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .setup-result {
+      margin-top: 14px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .setup-result.ok  { background: #14532d33; border: 1px solid #166534; color: #4ade80; }
+    .setup-result.err { background: #7f1d1d33; border: 1px solid #991b1b; color: #f87171; }
+
     /* ── Footer ── */
     .footer {
       margin-top: 40px;
@@ -202,6 +263,48 @@ _HTML = """<!DOCTYPE html>
       <h1>AI'PA Dashboard</h1>
       <p>Multi-tenant AI Agent Platform — BYOK</p>
     </div>
+  </div>
+
+  <!-- Bot Setup -->
+  <p class="section-title">Bot Setup</p>
+  <div class="setup-box">
+    <div class="setup-grid">
+      <div class="field">
+        <label class="field-label">Business Name <span style="color:#475569">(optional)</span></label>
+        <input id="s-name" placeholder="My Business" />
+      </div>
+      <div class="field">
+        <label class="field-label">Telegram Bot Token</label>
+        <input id="s-token" placeholder="1234567890:AAF..." />
+      </div>
+      <div class="field">
+        <label class="field-label">LLM API Key</label>
+        <input id="s-apikey" type="password" placeholder="sk-... or key-..." />
+      </div>
+      <div class="field">
+        <label class="field-label">Model</label>
+        <select id="s-model" onchange="onModelChange()">
+          <option value="openai/gpt-4o-mini">OpenAI — gpt-4o-mini (fast &amp; cheap)</option>
+          <option value="openai/gpt-4o">OpenAI — gpt-4o (powerful)</option>
+          <option value="anthropic/claude-haiku-4-5-20251001">Anthropic — Claude Haiku (fast)</option>
+          <option value="anthropic/claude-sonnet-4-6">Anthropic — Claude Sonnet (powerful)</option>
+          <option value="google/gemini-1.5-flash">Google — Gemini 1.5 Flash</option>
+          <option value="google/gemini-1.5-pro">Google — Gemini 1.5 Pro</option>
+          <option value="groq/llama-3.1-8b-instant">Groq — Llama 3.1 8B (free tier)</option>
+          <option value="groq/llama-3.3-70b-versatile">Groq — Llama 3.3 70B</option>
+          <option value="custom">Custom model string…</option>
+        </select>
+        <input id="s-model-custom" placeholder="e.g. mistral/mistral-small-latest"
+               style="display:none; margin-top:8px;" />
+      </div>
+      <div class="field" style="grid-column: 1 / -1;">
+        <label class="field-label">System Prompt <span style="color:#475569">(optional)</span></label>
+        <textarea id="s-prompt" rows="3"
+                  placeholder="You are a helpful assistant for {business name}. Answer questions about our products and services."></textarea>
+      </div>
+    </div>
+    <button class="setup-btn" onclick="setupBot()">⚡ Setup &amp; Connect</button>
+    <div id="setup-result" class="setup-result" style="display:none;"></div>
   </div>
 
   <!-- Status cards -->
@@ -295,6 +398,64 @@ _HTML = """<!DOCTYPE html>
   }
   checkHealth();
   setInterval(checkHealth, 10000);
+
+  // ── Bot Setup ──
+  function onModelChange() {
+    const sel = document.getElementById('s-model');
+    const custom = document.getElementById('s-model-custom');
+    custom.style.display = sel.value === 'custom' ? 'block' : 'none';
+  }
+
+  async function setupBot() {
+    const token  = document.getElementById('s-token').value.trim();
+    const apikey = document.getElementById('s-apikey').value.trim();
+    const selEl  = document.getElementById('s-model');
+    const model  = selEl.value === 'custom'
+      ? document.getElementById('s-model-custom').value.trim()
+      : selEl.value;
+    const name   = document.getElementById('s-name').value.trim() || 'My Business';
+    const prompt = document.getElementById('s-prompt').value.trim() || null;
+    const el     = document.getElementById('setup-result');
+
+    if (!token)  { showSetupResult('error', 'Bot token is required.'); return; }
+    if (!apikey) { showSetupResult('error', 'LLM API key is required.'); return; }
+    if (!model)  { showSetupResult('error', 'Model is required.'); return; }
+
+    const btn = document.querySelector('.setup-btn');
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+    el.style.display = 'none';
+
+    try {
+      const r = await fetch('/api/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bot_token: token, api_key: apikey, model, business_name: name, system_prompt: prompt }),
+      });
+      const d = await r.json();
+      if (r.ok && d.ok) {
+        showSetupResult('ok',
+          '✓ Connected!\n\nBusiness ID: ' + d.business_id + '\nWebhook URL: ' + d.webhook_url
+        );
+        document.getElementById('bot-token-input').value = token;
+        generateWebhook();
+      } else {
+        showSetupResult('error', 'Error: ' + (d.detail || JSON.stringify(d)));
+      }
+    } catch (e) {
+      showSetupResult('error', 'Error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⚡ Setup & Connect';
+    }
+  }
+
+  function showSetupResult(type, msg) {
+    const el = document.getElementById('setup-result');
+    el.className = 'setup-result ' + (type === 'ok' ? 'ok' : 'err');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
 
   // ── Webhook generator ──
   function generateWebhook() {
