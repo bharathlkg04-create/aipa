@@ -371,10 +371,13 @@ _HTML = """<!DOCTYPE html>
     <div class="sim-result" id="sim-result">Response will appear here…</div>
   </div>
 
-  <div class="footer">AI'PA · FastAPI + Supabase + LiteLLM · Built for small businesses</div>
+  <div class="footer" id="footer">AI'PA · FastAPI + Supabase + LiteLLM · Built for small businesses</div>
 </div>
 
 <script>
+  // JS running — update footer so we can see it
+  document.getElementById('footer').textContent = 'AI\'PA v1 · JS ✓ · ' + new Date().toLocaleTimeString();
+
   const origin = window.location.origin;
   document.getElementById('base-url').textContent = origin;
 
@@ -486,6 +489,7 @@ _HTML = """<!DOCTYPE html>
     el.className = 'setup-result ' + (type === 'ok' ? 'ok' : 'err');
     el.textContent = msg;
     el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   // ── Webhook generator ──
