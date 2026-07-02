@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 
 router = APIRouter(tags=["ui"])
 
-_HTML = """<!DOCTYPE html>
+_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -414,7 +414,7 @@ _HTML = """<!DOCTYPE html>
       document.getElementById('db-status').innerHTML = waking
         ? '<span class="badge badge-yellow"><span class="dot"></span>Waiting…</span>'
         : '<span class="badge badge-red"><span class="dot"></span>Unknown</span>';
-      document.getElementById('server-hint-text').textContent = waking
+      document.getElementById('setup-hint').textContent = waking
         ? '⏳ Server is waking up — you can still click Setup, it will wait.'
         : '❌ Server appears offline. Try refreshing the page.';
       if (waking) document.getElementById('server-env').textContent = 'Free tier: waking up (up to 60s)';
@@ -542,7 +542,7 @@ _HTML = """<!DOCTYPE html>
       let display;
       try { display = JSON.stringify(JSON.parse(text), null, 2); }
       catch { display = text; }
-      el.textContent = 'HTTP ' + r.status + '\\n\\n' + display;
+      el.textContent = 'HTTP ' + r.status + '\n\n' + display;
     } catch (e) {
       el.textContent = 'Error: ' + e.message;
     }
