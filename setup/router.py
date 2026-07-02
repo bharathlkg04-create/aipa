@@ -61,4 +61,9 @@ async def setup_business(
         )
 
     logger.info("business_setup_complete", business_id=business_id, model=payload.model)
-    return {"ok": True, "business_id": business_id, "webhook_url": webhook_url}
+    return {
+        "ok": True,
+        "business_id": business_id,
+        "webhook_url": webhook_url,
+        "owner_token": result["owner_token"],
+    }

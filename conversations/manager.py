@@ -59,7 +59,9 @@ async def process_telegram_message(
         await save_message(pool, conversation_id, role="user", content=user_text)
 
         fernet = get_fernet()
-        context = await fetch_agent_context(pool, business_id, conversation_id, fernet)
+        context = await fetch_agent_context(
+            pool, business_id, conversation_id, fernet, user_text=user_text
+        )
 
         system_prompt = build_system_prompt(context)
         llm_messages = build_llm_messages(

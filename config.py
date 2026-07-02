@@ -12,6 +12,13 @@ class Settings(BaseSettings):
 
     BASE_URL: str = ""
 
+    # Platform-level embedding credentials for skill retrieval.
+    # When EMBEDDING_API_KEY is empty, skill selection falls back to
+    # pinned + most recently enabled skills (no vector search).
+    EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
+    EMBEDDING_API_KEY: str = ""
+    MAX_SKILLS_IN_PROMPT: int = 5
+
     ENVIRONMENT: str = "production"
     LOG_LEVEL: str = "INFO"
     PORT: int = 8000

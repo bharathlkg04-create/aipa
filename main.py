@@ -8,6 +8,7 @@ from aipa.core.health import router as health_router
 from aipa.db.client import create_pool
 from aipa.logging_config import configure_logging
 from aipa.setup.router import router as setup_router
+from aipa.skills.router import router as skills_router
 from aipa.telegram.router import router as telegram_router
 from aipa.ui import router as ui_router
 
@@ -39,5 +40,6 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(setup_router)
+app.include_router(skills_router)
 app.include_router(telegram_router)
 app.include_router(ui_router)

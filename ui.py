@@ -244,6 +244,94 @@ _HTML = r"""<!DOCTYPE html>
     .setup-result.ok  { background: #14532d33; border: 1px solid #166534; color: #4ade80; }
     .setup-result.err { background: #7f1d1d33; border: 1px solid #991b1b; color: #f87171; }
 
+    /* ── Skill store ── */
+    .skill-controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .skill-controls input, .skill-controls select {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 9px 14px;
+      color: #e2e8f0;
+      font-size: 13px;
+      outline: none;
+    }
+    .skill-controls input:focus, .skill-controls select:focus { border-color: #6366f1; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .chip {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #1e2130;
+      color: #94a3b8;
+      border: 1px solid #2d3148;
+      transition: all 0.15s;
+    }
+    .chip:hover { border-color: #6366f1; }
+    .chip.active { background: #6366f1; color: white; border-color: #6366f1; }
+    .skill-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 13px 16px;
+      border-bottom: 1px solid #2d3148;
+    }
+    .skill-row:last-child { border-bottom: none; }
+    .skill-info { flex: 1; min-width: 0; }
+    .skill-name { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+    .skill-desc { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .skill-tags { display: flex; gap: 6px; margin-top: 5px; }
+    .skill-tag {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #0f1117;
+      color: #64748b;
+      border: 1px solid #2d3148;
+    }
+    .toggle {
+      position: relative;
+      width: 42px; height: 24px;
+      flex-shrink: 0;
+      border-radius: 12px;
+      background: #2d3148;
+      cursor: pointer;
+      transition: background 0.2s;
+      border: none;
+    }
+    .toggle.on { background: #10b981; }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: white;
+      transition: transform 0.2s;
+    }
+    .toggle.on::after { transform: translateX(18px); }
+    .toggle:disabled { opacity: 0.5; cursor: wait; }
+    .skill-count { font-size: 12px; color: #4ade80; font-weight: 600; }
+    .load-more {
+      display: block;
+      width: 100%;
+      margin-top: 4px;
+      background: #1e2130;
+      color: #94a3b8;
+      border: 1px solid #2d3148;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .load-more:hover { border-color: #6366f1; color: #e2e8f0; }
+
     /* ── Footer ── */
     .footer {
       margin-top: 40px;
@@ -354,6 +442,31 @@ _HTML = r"""<!DOCTYPE html>
       <span id="copy-msg" style="font-size:12px; color:#4ade80; opacity:0; transition:opacity 0.3s;">Copied!</span>
     </div>
     <div id="register-result" style="font-size:12px; margin-top:10px; font-family:monospace; min-height:18px;"></div>
+  </div>
+
+  <!-- Skill Store -->
+  <p class="section-title">Skill Store <span class="skill-count" id="skill-count"></span></p>
+  <div class="setup-box">
+    <div class="skill-controls">
+      <input id="sk-business" placeholder="Business ID (filled after setup)" style="flex:2; min-width:220px;" />
+      <input id="sk-owner" type="password" placeholder="Owner token (filled after setup)" style="flex:1; min-width:180px;" />
+      <select id="sk-industry" style="flex:1; min-width:170px;" onchange="onIndustryChange()">
+        <option value="">All industries</option>
+      </select>
+      <button type="button" class="sim-btn" id="sk-pack-btn" onclick="enablePack()" style="background:#059669;">⚡ Enable Starter Pack</button>
+    </div>
+    <div class="skill-controls">
+      <input id="sk-search" placeholder="Search 2000+ skills… (e.g. booking, refunds, upsell)" style="flex:1; min-width:240px;"
+             oninput="onSkillSearch()" />
+    </div>
+    <div class="chips" id="sk-chips"></div>
+    <div id="sk-list" style="background:#0f1117; border:1px solid #2d3148; border-radius:10px;">
+      <div style="padding:18px; font-size:13px; color:#64748b;">
+        Enter your Business ID (shown after Setup &amp; Connect) to browse and toggle skills.
+      </div>
+    </div>
+    <button type="button" class="load-more" id="sk-more" style="display:none;" onclick="loadSkills(false)">Load more</button>
+    <div id="sk-msg" style="font-size:12px; margin-top:10px; font-family:monospace; min-height:16px; color:#94a3b8;"></div>
   </div>
 
   <!-- Simulate health ping -->
@@ -467,10 +580,16 @@ _HTML = r"""<!DOCTYPE html>
       console.log('[setupBot] response', r.status, d);
       if (r.ok && d.ok) {
         showSetupResult('ok',
-          '✓ Connected!\n\nBusiness ID: ' + d.business_id + '\nWebhook: ' + d.webhook_url
+          '✓ Connected!\n\nBusiness ID: ' + d.business_id +
+          '\nOwner Token: ' + d.owner_token +
+          '\nWebhook: ' + d.webhook_url +
+          '\n\n⚠ Save your Owner Token — it is required to manage skills.'
         );
         document.getElementById('bot-token-input').value = token;
         generateWebhook();
+        document.getElementById('sk-business').value = d.business_id;
+        document.getElementById('sk-owner').value = d.owner_token || '';
+        loadSkills(true);
       } else {
         showSetupResult('error', 'Setup failed (HTTP ' + r.status + '): ' + (d.detail || JSON.stringify(d)));
       }
@@ -529,6 +648,193 @@ _HTML = r"""<!DOCTYPE html>
       el.textContent = 'Error: ' + e.message;
     }
   }
+
+  // ── Skill Store ──
+  let _skCategory = null;
+  let _skOffset = 0;
+  let _skSearchTimer = null;
+  const SK_PAGE = 30;
+
+  async function loadSkillMeta() {
+    try {
+      const r = await fetch('/api/skills/meta');
+      const d = await r.json();
+      const sel = document.getElementById('sk-industry');
+      (d.industries || []).forEach(i => {
+        if (i.industry === 'generic') return;
+        const opt = document.createElement('option');
+        opt.value = i.industry;
+        opt.textContent = i.industry.replace(/-/g, ' ') + ' (' + i.n + ')';
+        sel.appendChild(opt);
+      });
+      const chips = document.getElementById('sk-chips');
+      chips.innerHTML = '';
+      const allChip = makeChip('All', null);
+      allChip.classList.add('active');
+      chips.appendChild(allChip);
+      (d.categories || []).forEach(c => chips.appendChild(makeChip(c.category, c.category)));
+      if (d.total) document.getElementById('skill-count').textContent = d.total + ' skills available';
+    } catch { /* server may still be waking up */ }
+  }
+
+  function makeChip(label, value) {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'chip';
+    el.textContent = label;
+    el.onclick = () => {
+      _skCategory = value;
+      document.querySelectorAll('#sk-chips .chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      loadSkills(true);
+    };
+    return el;
+  }
+
+  function onIndustryChange() { loadSkills(true); }
+
+  function onSkillSearch() {
+    clearTimeout(_skSearchTimer);
+    _skSearchTimer = setTimeout(() => loadSkills(true), 350);
+  }
+
+  async function loadSkills(reset) {
+    const bizId = document.getElementById('sk-business').value.trim();
+    if (reset) _skOffset = 0;
+    const params = new URLSearchParams({ limit: SK_PAGE, offset: _skOffset });
+    if (bizId) params.set('business_id', bizId);
+    const industry = document.getElementById('sk-industry').value;
+    if (industry) params.set('industry', industry);
+    if (_skCategory) params.set('category', _skCategory);
+    const q = document.getElementById('sk-search').value.trim();
+    if (q) params.set('q', q);
+
+    const list = document.getElementById('sk-list');
+    if (reset) list.innerHTML = '<div style="padding:18px; font-size:13px; color:#64748b;">Loading…</div>';
+
+    try {
+      const r = await fetch('/api/skills?' + params);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      if (reset) list.innerHTML = '';
+      if (reset && (!d.skills || !d.skills.length)) {
+        list.innerHTML = '<div style="padding:18px; font-size:13px; color:#64748b;">No skills match. Run the seed script or change filters.</div>';
+      }
+      (d.skills || []).forEach(s => list.appendChild(renderSkillRow(s, bizId)));
+      _skOffset += (d.skills || []).length;
+      document.getElementById('sk-more').style.display =
+        (d.skills || []).length === SK_PAGE ? 'block' : 'none';
+      if (bizId) {
+        document.getElementById('sk-msg').style.color = '#4ade80';
+        document.getElementById('sk-msg').textContent = d.enabled_count + ' skills enabled for this business';
+      }
+    } catch (e) {
+      list.innerHTML = '<div style="padding:18px; font-size:13px; color:#f87171;">Error: ' + e.message + '</div>';
+    }
+  }
+
+  function renderSkillRow(s, bizId) {
+    const row = document.createElement('div');
+    row.className = 'skill-row';
+
+    const info = document.createElement('div');
+    info.className = 'skill-info';
+    const name = document.createElement('div');
+    name.className = 'skill-name';
+    name.textContent = s.name;
+    const desc = document.createElement('div');
+    desc.className = 'skill-desc';
+    desc.textContent = s.description || '';
+    const tags = document.createElement('div');
+    tags.className = 'skill-tags';
+    [s.industry, s.category].forEach(t => {
+      if (!t) return;
+      const tag = document.createElement('span');
+      tag.className = 'skill-tag';
+      tag.textContent = t.replace(/-/g, ' ');
+      tags.appendChild(tag);
+    });
+    info.appendChild(name); info.appendChild(desc); info.appendChild(tags);
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'toggle' + (s.is_enabled ? ' on' : '');
+    toggle.title = bizId ? 'Toggle skill' : 'Enter Business ID first';
+    toggle.onclick = () => toggleSkill(s.id, toggle);
+    row.appendChild(info);
+    row.appendChild(toggle);
+    return row;
+  }
+
+  async function toggleSkill(skillId, el) {
+    const bizId = document.getElementById('sk-business').value.trim();
+    const ownerToken = document.getElementById('sk-owner').value.trim();
+    const msg = document.getElementById('sk-msg');
+    if (!bizId) {
+      msg.style.color = '#fbbf24';
+      msg.textContent = 'Enter your Business ID first (shown after Setup & Connect).';
+      return;
+    }
+    if (!ownerToken) {
+      msg.style.color = '#fbbf24';
+      msg.textContent = 'Enter your Owner Token (shown once after Setup & Connect).';
+      return;
+    }
+    const turningOn = !el.classList.contains('on');
+    el.disabled = true;
+    try {
+      const r = await fetch('/api/skills/' + skillId + '/toggle', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Token': ownerToken },
+        body: JSON.stringify({ business_id: bizId, is_enabled: turningOn }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      el.classList.toggle('on', turningOn);
+      msg.style.color = '#4ade80';
+      msg.textContent = d.enabled_count + ' skills enabled for this business';
+    } catch (e) {
+      msg.style.color = '#f87171';
+      msg.textContent = 'Toggle failed: ' + e.message;
+    } finally {
+      el.disabled = false;
+    }
+  }
+
+  async function enablePack() {
+    const bizId = document.getElementById('sk-business').value.trim();
+    const ownerToken = document.getElementById('sk-owner').value.trim();
+    const industry = document.getElementById('sk-industry').value;
+    const msg = document.getElementById('sk-msg');
+    if (!bizId) { msg.style.color = '#fbbf24'; msg.textContent = 'Enter your Business ID first.'; return; }
+    if (!ownerToken) { msg.style.color = '#fbbf24'; msg.textContent = 'Enter your Owner Token first.'; return; }
+    if (!industry) { msg.style.color = '#fbbf24'; msg.textContent = 'Pick your industry first, then enable its starter pack.'; return; }
+    const btn = document.getElementById('sk-pack-btn');
+    btn.disabled = true;
+    msg.style.color = '#94a3b8';
+    msg.textContent = 'Enabling starter pack…';
+    try {
+      const r = await fetch('/api/skills/enable-pack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Token': ownerToken },
+        body: JSON.stringify({ business_id: bizId, industry }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      msg.style.color = '#4ade80';
+      msg.textContent = '✓ Starter pack enabled (' + d.skills_enabled + ' skills). Total enabled: ' + d.enabled_count;
+      loadSkills(true);
+    } catch (e) {
+      msg.style.color = '#f87171';
+      msg.textContent = 'Error: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('sk-business').addEventListener('change', () => loadSkills(true));
+  loadSkillMeta();
+  loadSkills(true);
 
   // ── API tester ──
   async function sendRequest() {

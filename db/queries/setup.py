@@ -11,22 +11,34 @@ async def get_or_create_business_and_channel(
     async with pool.acquire() as conn:
         existing = await conn.fetchrow(
             """
-            SELECT id, business_id, webhook_secret
-            FROM channels
-            WHERE channel_token = $1 AND channel_type = 'telegram'
+            SELECT c.id, c.business_id, c.webhook_secret, b.owner_token
+            FROM channels c
+            JOIN businesses b ON b.id = c.business_id
+            WHERE c.channel_token = $1 AND c.channel_type = 'telegram'
             """,
             bot_token,
         )
         if existing:
+            owner_token = existing["owner_token"]
+            if not owner_token:
+                owner_token = secrets.token_urlsafe(24)
+                await conn.execute(
+                    "UPDATE businesses SET owner_token = $1 WHERE id = $2",
+                    owner_token,
+                    existing["business_id"],
+                )
             return {
                 "channel_id": str(existing["id"]),
                 "business_id": str(existing["business_id"]),
                 "webhook_secret": existing["webhook_secret"],
+                "owner_token": owner_token,
             }
 
+        owner_token = secrets.token_urlsafe(24)
         business = await conn.fetchrow(
-            "INSERT INTO businesses (name) VALUES ($1) RETURNING id",
+            "INSERT INTO businesses (name, owner_token) VALUES ($1, $2) RETURNING id",
             business_name,
+            owner_token,
         )
         business_id = str(business["id"])
         webhook_secret = secrets.token_hex(32)
@@ -45,6 +57,7 @@ async def get_or_create_business_and_channel(
             "channel_id": str(channel["id"]),
             "business_id": business_id,
             "webhook_secret": webhook_secret,
+            "owner_token": owner_token,
         }
 
 
