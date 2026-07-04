@@ -4,6 +4,25 @@ import httpx
 logger = structlog.get_logger(__name__)
 
 
+async def get_bot_info(bot_token: str) -> dict | None:
+    """Resolve a bot token to its identity via Telegram getMe.
+    Returns {'id', 'username', 'name'} or None when the token is invalid."""
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")
+        data = resp.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    if not data.get("ok"):
+        return None
+    result = data["result"]
+    return {
+        "id": result.get("id"),
+        "username": result.get("username"),
+        "name": result.get("first_name"),
+    }
+
+
 async def send_telegram_message(
     bot_token: str,
     chat_id: int,

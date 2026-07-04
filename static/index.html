@@ -25,7 +25,8 @@
       </div>
       <div class="field">
         <label>Telegram bot token <span class="hint">(from @BotFather)</span></label>
-        <input id="su-token" placeholder="1234567890:AAF..." />
+        <input id="su-token" placeholder="1234567890:AAF..." oninput="onBotTokenInput()" />
+        <div id="su-bot-hint" class="form-msg" style="margin-top:2px;"></div>
       </div>
       <div class="field">
         <label>LLM API key <span class="hint">(yours — never shared)</span></label>

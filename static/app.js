@@ -24,11 +24,28 @@ async function api(path, options = {}) {
   const auth = getAuth();
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (auth) headers["X-Owner-Token"] = auth.ownerToken;
-  const r = await fetch(path, { ...options, headers });
-  let data = null;
-  try { data = await r.json(); } catch { /* non-JSON (e.g. images handled elsewhere) */ }
-  if (!r.ok) throw new Error((data && data.detail) || "HTTP " + r.status);
-  return data;
+
+  // Free-tier hosting throws transient 502/503s (cold starts, restarts) —
+  // retry idempotent GETs a couple of times before giving up.
+  const retriable = !options.method || options.method === "GET";
+  const attempts = retriable ? 3 : 1;
+  let lastErr = null;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((res) => setTimeout(res, 1500 * i));
+    let r;
+    try {
+      r = await fetch(path, { ...options, headers });
+    } catch (e) {
+      lastErr = new Error("Network error — server may be waking up");
+      continue;
+    }
+    let data = null;
+    try { data = await r.json(); } catch { /* non-JSON body */ }
+    if (r.ok) return data;
+    lastErr = new Error((data && data.detail) || "HTTP " + r.status);
+    if (r.status !== 502 && r.status !== 503 && r.status !== 504) throw lastErr;
+  }
+  throw lastErr;
 }
 
 // ── Model options (shared by setup + personality) ────────────────────────────
@@ -115,6 +132,46 @@ function signOut() {
   clearAuth();
   _account = null;
   showAuthView();
+}
+
+// ── Bot token auto-recognition ───────────────────────────────────────────────
+let _botVerifyTimer = null;
+let _verifiedBot = null;
+
+function onBotTokenInput() {
+  clearTimeout(_botVerifyTimer);
+  _verifiedBot = null;
+  const token = $("su-token").value.trim();
+  const hint = $("su-bot-hint");
+  if (token.length < 20) { hint.textContent = ""; return; }
+  hint.className = "form-msg warn";
+  hint.textContent = "Checking token with Telegram…";
+  _botVerifyTimer = setTimeout(() => verifyBotToken(token), 600);
+}
+
+async function verifyBotToken(token) {
+  const hint = $("su-bot-hint");
+  try {
+    const d = await api("/api/telegram/verify", {
+      method: "POST",
+      body: JSON.stringify({ bot_token: token }),
+    });
+    if ($("su-token").value.trim() !== token) return; // user kept typing
+    if (d.ok && d.bot) {
+      _verifiedBot = d.bot;
+      hint.className = "form-msg ok";
+      hint.textContent = "✓ Recognised: " + (d.bot.name || "bot") +
+        (d.bot.username ? " (@" + d.bot.username + ")" : "");
+      const nameField = $("su-name");
+      if (!nameField.value.trim() && d.bot.name) nameField.value = d.bot.name;
+    } else {
+      hint.className = "form-msg err";
+      hint.textContent = "✗ " + (d.detail || "Telegram does not recognise this token.");
+    }
+  } catch (e) {
+    hint.className = "form-msg warn";
+    hint.textContent = "Could not verify right now (" + e.message + ") — you can still continue.";
+  }
 }
 
 // ── Setup & login ────────────────────────────────────────────────────────────
@@ -424,8 +481,25 @@ async function loadChannels() {
       $("tg-info").innerHTML = "";
       const p = document.createElement("p");
       p.className = "channel-desc";
-      p.textContent = "Bot token " + tg.token_hint + " · connected " +
-        (tg.created_at ? new Date(tg.created_at).toLocaleDateString() : "");
+      if (tg.bot && tg.bot.username) {
+        p.innerHTML = "";
+        const b = document.createElement("b");
+        b.textContent = (tg.bot.name || "Bot") + " (@" + tg.bot.username + ")";
+        p.appendChild(b);
+        p.appendChild(document.createTextNode(
+          " · connected " +
+          (tg.created_at ? new Date(tg.created_at).toLocaleDateString() : "")
+        ));
+        const link = document.createElement("a");
+        link.href = "https://t.me/" + tg.bot.username;
+        link.target = "_blank";
+        link.textContent = "Open chat ↗";
+        link.style.marginLeft = "10px";
+        p.appendChild(link);
+      } else {
+        p.textContent = "Bot token " + tg.token_hint + " · connected " +
+          (tg.created_at ? new Date(tg.created_at).toLocaleDateString() : "");
+      }
       $("tg-info").appendChild(p);
     } else {
       $("tg-badge").className = "badge";
@@ -434,7 +508,9 @@ async function loadChannels() {
     }
     waRefreshBadge();
   } catch (e) {
-    $("tg-info").textContent = "Error: " + e.message;
+    $("tg-badge").className = "badge red";
+    $("tg-badge").textContent = "Error";
+    $("tg-info").textContent = "Could not load channel info (" + e.message + "). It will retry when you reopen this tab.";
   }
 }
 

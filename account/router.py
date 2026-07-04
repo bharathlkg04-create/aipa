@@ -1,3 +1,4 @@
+import time
 from uuid import UUID
 
 import structlog
@@ -28,6 +29,24 @@ def _mask_token(token: str) -> str:
     if len(token) <= 12:
         return token[:4] + "…"
     return token[:8] + "…" + token[-4:]
+
+
+# getMe results cached per bot token so /api/account stays fast
+_BOT_CACHE_TTL = 600.0
+_bot_cache: dict[str, tuple[float, dict | None]] = {}
+
+
+async def _cached_bot_info(bot_token: str) -> dict | None:
+    from aipa.telegram.sender import get_bot_info
+
+    cached = _bot_cache.get(bot_token)
+    if cached and time.monotonic() - cached[0] < _BOT_CACHE_TTL:
+        return cached[1]
+    bot = await get_bot_info(bot_token)
+    # Don't cache lookup failures caused by transient network errors
+    if bot is not None or cached is None:
+        _bot_cache[bot_token] = (time.monotonic(), bot)
+    return bot if bot is not None else (cached[1] if cached else None)
 
 
 @router.get("/account")
@@ -70,6 +89,11 @@ async def get_account(
                 "token_hint": _mask_token(c["channel_token"]),
                 "is_active": c["is_active"],
                 "created_at": c["created_at"].isoformat() if c["created_at"] else None,
+                "bot": (
+                    await _cached_bot_info(c["channel_token"])
+                    if c["channel_type"] == "telegram" and c["is_active"]
+                    else None
+                ),
             }
             for c in channels
         ],

@@ -10,10 +10,21 @@ from aipa.db.queries.setup import (
     save_boss_config,
 )
 from aipa.dependencies import get_db, get_fernet
-from aipa.setup.schemas import SetupRequest
+from aipa.setup.schemas import SetupRequest, VerifyBotRequest
+from aipa.telegram.sender import get_bot_info
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["setup"])
+
+
+@router.post("/telegram/verify")
+async def verify_bot_token(payload: VerifyBotRequest) -> dict:
+    """Resolve a bot token to its bot account (name/username) via getMe,
+    so the dashboard can recognise the bot before setup is submitted."""
+    bot = await get_bot_info(payload.bot_token.strip())
+    if bot is None:
+        return {"ok": False, "detail": "Telegram does not recognise this token."}
+    return {"ok": True, "bot": bot}
 
 
 @router.post("/setup")
