@@ -4,17 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aipa"
-version = "0.1.0"
+version = "0.2.0"
 
 [tool.setuptools]
 package-dir = {"aipa" = "."}
 packages = [
     "aipa",
-    "aipa.db",
-    "aipa.db.queries",
+    "aipa.account",
     "aipa.agent",
     "aipa.conversations",
     "aipa.core",
+    "aipa.db",
+    "aipa.db.queries",
+    "aipa.scripts",
     "aipa.setup",
+    "aipa.skills",
     "aipa.telegram",
+    "aipa.whatsapp",
 ]
+
+[tool.setuptools.package-data]
+aipa = ["static/*"]
