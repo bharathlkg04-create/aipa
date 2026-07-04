@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     EMBEDDING_API_KEY: str = ""
     MAX_SKILLS_IN_PROMPT: int = 5
 
+    # WhatsApp bridge (WAHA — https://waha.devlike.pro). Leave WAHA_URL empty
+    # to disable WhatsApp. WAHA Core (free) supports only the single session
+    # "default"; set WAHA_MULTI_SESSION=true with WAHA Plus for per-business
+    # sessions.
+    WAHA_URL: str = ""
+    WAHA_API_KEY: str = ""
+    WAHA_MULTI_SESSION: bool = False
+
     ENVIRONMENT: str = "production"
     LOG_LEVEL: str = "INFO"
     PORT: int = 8000

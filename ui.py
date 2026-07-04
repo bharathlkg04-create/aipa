@@ -444,6 +444,28 @@ _HTML = r"""<!DOCTYPE html>
     <div id="register-result" style="font-size:12px; margin-top:10px; font-family:monospace; min-height:18px;"></div>
   </div>
 
+  <!-- WhatsApp channel -->
+  <p class="section-title">WhatsApp Channel <span style="color:#4ade80; text-transform:none; letter-spacing:0;">— link by QR code</span></p>
+  <div class="setup-box">
+    <div class="card-sub">
+      Link a WhatsApp number to your assistant. Requires a running WAHA bridge
+      (server env <code style="color:#a78bfa;">WAHA_URL</code>) and the Business ID + Owner Token from Setup above.
+    </div>
+    <div class="skill-controls" style="margin-top:12px;">
+      <input id="wa-business" placeholder="Business ID (filled after setup)" style="flex:2; min-width:220px;" />
+      <input id="wa-owner" type="password" placeholder="Owner token" style="flex:1; min-width:180px;" />
+      <button type="button" class="sim-btn" id="wa-connect-btn" onclick="waConnect()" style="background:#059669;">📱 Connect WhatsApp</button>
+      <button type="button" class="sim-btn" onclick="waDisconnect()" style="background:#7f1d1d;">Disconnect</button>
+    </div>
+    <div id="wa-status" style="font-size:13px; font-family:monospace; color:#94a3b8; min-height:18px; margin-bottom:12px;"></div>
+    <div id="wa-qr-wrap" style="display:none; text-align:center; background:white; border-radius:12px; padding:16px; max-width:300px; margin:0 auto;">
+      <img id="wa-qr" alt="WhatsApp QR code" style="width:256px; height:256px; display:block; margin:0 auto;" />
+      <div style="font-size:12px; color:#334155; margin-top:8px;">
+        WhatsApp → Settings → <b>Linked devices</b> → <b>Link a device</b> → scan this code
+      </div>
+    </div>
+  </div>
+
   <!-- Skill Store -->
   <p class="section-title">Skill Store <span class="skill-count" id="skill-count"></span></p>
   <div class="setup-box">
@@ -589,6 +611,8 @@ _HTML = r"""<!DOCTYPE html>
         generateWebhook();
         document.getElementById('sk-business').value = d.business_id;
         document.getElementById('sk-owner').value = d.owner_token || '';
+        document.getElementById('wa-business').value = d.business_id;
+        document.getElementById('wa-owner').value = d.owner_token || '';
         loadSkills(true);
       } else {
         showSetupResult('error', 'Setup failed (HTTP ' + r.status + '): ' + (d.detail || JSON.stringify(d)));
@@ -646,6 +670,133 @@ _HTML = r"""<!DOCTYPE html>
     } catch (e) {
       el.style.color = '#f87171';
       el.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  // ── WhatsApp channel (QR linking via WAHA) ──
+  let _waPollTimer = null;
+  let _waQrUrl = null;
+
+  function waCreds() {
+    const bizId = document.getElementById('wa-business').value.trim();
+    const owner = document.getElementById('wa-owner').value.trim();
+    const st = document.getElementById('wa-status');
+    if (!bizId || !owner) {
+      st.style.color = '#fbbf24';
+      st.textContent = 'Enter Business ID and Owner Token first (shown after Setup & Connect).';
+      return null;
+    }
+    return { bizId, owner, st };
+  }
+
+  function waStopPolling() {
+    if (_waPollTimer) { clearInterval(_waPollTimer); _waPollTimer = null; }
+  }
+
+  function waHideQr() {
+    document.getElementById('wa-qr-wrap').style.display = 'none';
+    if (_waQrUrl) { URL.revokeObjectURL(_waQrUrl); _waQrUrl = null; }
+  }
+
+  async function waShowQr(bizId, owner) {
+    try {
+      const r = await fetch('/api/whatsapp/qr?business_id=' + encodeURIComponent(bizId),
+                            { headers: { 'X-Owner-Token': owner } });
+      if (!r.ok) return; // QR not ready yet — next poll will retry
+      const blob = await r.blob();
+      if (_waQrUrl) URL.revokeObjectURL(_waQrUrl);
+      _waQrUrl = URL.createObjectURL(blob);
+      document.getElementById('wa-qr').src = _waQrUrl;
+      document.getElementById('wa-qr-wrap').style.display = 'block';
+    } catch { /* transient — keep polling */ }
+  }
+
+  async function waPoll(bizId, owner) {
+    const st = document.getElementById('wa-status');
+    try {
+      const r = await fetch('/api/whatsapp/status?business_id=' + encodeURIComponent(bizId),
+                            { headers: { 'X-Owner-Token': owner } });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+
+      if (d.status === 'WORKING') {
+        waStopPolling(); waHideQr();
+        st.style.color = '#4ade80';
+        st.textContent = '✓ WhatsApp connected' + (d.phone ? ' — ' + d.phone : '') +
+                         (d.name ? ' (' + d.name + ')' : '');
+      } else if (d.status === 'SCAN_QR_CODE') {
+        st.style.color = '#fbbf24';
+        st.textContent = 'Scan the QR code with WhatsApp on your phone… (code refreshes automatically)';
+        waShowQr(bizId, owner); // re-fetch each poll — WhatsApp rotates the QR
+      } else if (d.status === 'FAILED') {
+        waStopPolling(); waHideQr();
+        st.style.color = '#f87171';
+        st.textContent = 'Session failed — click Connect to retry.';
+      } else {
+        st.style.color = '#94a3b8';
+        st.textContent = 'Session status: ' + d.status + '…';
+      }
+    } catch (e) {
+      waStopPolling(); waHideQr();
+      st.style.color = '#f87171';
+      st.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  async function waConnect() {
+    const c = waCreds();
+    if (!c) return;
+    const btn = document.getElementById('wa-connect-btn');
+    btn.disabled = true;
+    c.st.style.color = '#94a3b8';
+    c.st.textContent = 'Starting WhatsApp session…';
+    waStopPolling(); waHideQr();
+    try {
+      const r = await fetch('/api/whatsapp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Token': c.owner },
+        body: JSON.stringify({ business_id: c.bizId }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      c.st.textContent = 'Session "' + d.session + '" starting — waiting for QR…';
+      waPoll(c.bizId, c.owner);
+      _waPollTimer = setInterval(() => waPoll(c.bizId, c.owner), 3000);
+      // Safety stop after 3 minutes of not linking
+      setTimeout(() => {
+        if (_waPollTimer) {
+          waStopPolling(); waHideQr();
+          c.st.style.color = '#fbbf24';
+          c.st.textContent = 'QR expired / timed out — click Connect to try again.';
+        }
+      }, 180000);
+    } catch (e) {
+      c.st.style.color = '#f87171';
+      c.st.textContent = 'Connect failed: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function waDisconnect() {
+    const c = waCreds();
+    if (!c) return;
+    waStopPolling(); waHideQr();
+    c.st.style.color = '#94a3b8';
+    c.st.textContent = 'Disconnecting…';
+    try {
+      const r = await fetch('/api/whatsapp/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Token': c.owner },
+        body: JSON.stringify({ business_id: c.bizId }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      c.st.style.color = '#4ade80';
+      c.st.textContent = '✓ WhatsApp unlinked.';
+    } catch (e) {
+      c.st.style.color = '#f87171';
+      c.st.textContent = 'Disconnect failed: ' + e.message;
     }
   }
 
@@ -859,6 +1010,7 @@ _HTML = r"""<!DOCTYPE html>
 """
 
 
-@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+# Developer console — the customer-facing dashboard now lives at "/" (aipa/static/)
+@router.get("/dev", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard() -> HTMLResponse:
     return HTMLResponse(content=_HTML)

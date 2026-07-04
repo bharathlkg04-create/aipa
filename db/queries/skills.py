@@ -67,6 +67,7 @@ async def list_skills(
     search: str | None,
     limit: int,
     offset: int,
+    enabled_only: bool = False,
 ) -> list[asyncpg.Record]:
     """Browse the skill catalog with the business's enabled/pinned state."""
     async with pool.acquire() as conn:
@@ -78,12 +79,14 @@ async def list_skills(
             FROM skills s
             LEFT JOIN business_skills bs
                    ON s.id = bs.skill_id AND bs.business_id = $1
-            WHERE ($2::text IS NULL OR s.category = $2)
+            WHERE (NOT $7 OR COALESCE(bs.is_enabled, false))
+              AND ($2::text IS NULL OR s.category = $2)
               AND ($3::text IS NULL OR s.industry IN ($3, 'generic'))
               AND ($4::text IS NULL
                    OR s.name ILIKE '%' || $4 || '%'
                    OR s.description ILIKE '%' || $4 || '%')
             ORDER BY COALESCE(bs.is_enabled, false) DESC,
+                     s.is_verified DESC,
                      s.industry = 'generic' DESC,
                      s.name
             LIMIT $5 OFFSET $6
@@ -94,6 +97,7 @@ async def list_skills(
             search,
             limit,
             offset,
+            enabled_only,
         )
 
 

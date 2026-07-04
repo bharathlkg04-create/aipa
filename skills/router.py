@@ -1,10 +1,9 @@
-import secrets
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from aipa.db.queries.businesses import get_owner_token
+from aipa.core.auth import verify_owner as _verify_owner
 from aipa.db.queries.skills import (
     count_enabled_skills,
     enable_industry_pack,
@@ -26,17 +25,6 @@ def _validate_uuid(value: str, field: str) -> str:
         raise HTTPException(status_code=400, detail=f"Invalid {field}: not a UUID")
 
 
-async def _verify_owner(pool, business_id: str, token: str | None) -> None:
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing X-Owner-Token header (returned by /api/setup).",
-        )
-    stored = await get_owner_token(pool, business_id)
-    if stored is None or not secrets.compare_digest(stored, token):
-        raise HTTPException(status_code=403, detail="Invalid owner token")
-
-
 @router.get("")
 async def browse_skills(
     business_id: str | None = Query(default=None),
@@ -45,12 +33,17 @@ async def browse_skills(
     q: str | None = Query(default=None, max_length=100),
     limit: int = Query(default=30, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    enabled_only: bool = Query(default=False),
     pool=Depends(get_db),
 ) -> dict:
     if business_id:
         business_id = _validate_uuid(business_id, "business_id")
+    if enabled_only and not business_id:
+        raise HTTPException(status_code=400, detail="enabled_only requires business_id")
 
-    rows = await list_skills(pool, business_id, category, industry, q, limit, offset)
+    rows = await list_skills(
+        pool, business_id, category, industry, q, limit, offset, enabled_only
+    )
     enabled_count = (
         await count_enabled_skills(pool, business_id) if business_id else 0
     )
