@@ -6,7 +6,7 @@ _DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-def build_system_prompt(context: AgentContext) -> str:
+def build_system_prompt(context: AgentContext, customer_name: str | None = None) -> str:
     sections: list[str] = []
 
     base = (
@@ -15,6 +15,12 @@ def build_system_prompt(context: AgentContext) -> str:
         else None
     ) or _DEFAULT_SYSTEM_PROMPT
     sections.append(base)
+
+    if customer_name:
+        sections.append(
+            f"## Customer\nYou are talking to {customer_name}. "
+            "Address them by name when it feels natural — do not overuse it."
+        )
 
     if context.knowledge_base:
         sections.append("## Business Knowledge Base")

@@ -88,12 +88,17 @@ async def whatsapp_webhook(
 
     from aipa.conversations.manager import process_whatsapp_message
 
+    # WhatsApp push name of the sender (WAHA exposes it as notifyName)
+    raw = payload.get("_data") or {}
+    customer_name = payload.get("notifyName") or raw.get("notifyName") or None
+
     background_tasks.add_task(
         process_whatsapp_message,
         pool=pool,
         channel=channel,
         chat_id=chat_id,
         user_text=body,
+        customer_name=customer_name,
     )
     return {"ok": True}
 

@@ -38,6 +38,7 @@ async def _process_inbound(
     user_text: str,
     send_reply: SendReply,
     log,
+    customer_name: str | None = None,
 ) -> None:
     """Channel-agnostic pipeline: persist → build context → LLM → reply."""
 
@@ -62,7 +63,7 @@ async def _process_inbound(
             pool, business_id, conversation_id, fernet, user_text=user_text
         )
 
-        system_prompt = build_system_prompt(context)
+        system_prompt = build_system_prompt(context, customer_name)
         llm_messages = build_llm_messages(
             system_prompt, context.recent_messages, user_text
         )
@@ -96,6 +97,13 @@ async def process_telegram_message(
     bot_token: str = channel["channel_token"]
     chat_id: int = msg.chat.id
 
+    # The customer's Telegram account name, e.g. "Bharath (@bharath_k)"
+    customer_name = None
+    if msg.from_user is not None:
+        customer_name = msg.from_user.first_name
+        if msg.from_user.username:
+            customer_name += f" (@{msg.from_user.username})"
+
     log = logger.bind(
         business_id=str(channel["business_id"]),
         update_id=update.update_id,
@@ -105,7 +113,10 @@ async def process_telegram_message(
     async def send_reply(text: str) -> None:
         await send_telegram_message(bot_token, chat_id, text)
 
-    await _process_inbound(pool, channel, str(chat_id), msg.text, send_reply, log)
+    await _process_inbound(
+        pool, channel, str(chat_id), msg.text, send_reply, log,
+        customer_name=customer_name,
+    )
 
 
 async def process_whatsapp_message(
@@ -113,6 +124,7 @@ async def process_whatsapp_message(
     channel,
     chat_id: str,
     user_text: str,
+    customer_name: str | None = None,
 ) -> None:
     # Imported here so Telegram-only deployments never touch WAHA settings
     from aipa.whatsapp.waha import send_text
@@ -128,4 +140,7 @@ async def process_whatsapp_message(
     async def send_reply(text: str) -> None:
         await send_text(session, chat_id, text)
 
-    await _process_inbound(pool, channel, chat_id, user_text, send_reply, log)
+    await _process_inbound(
+        pool, channel, chat_id, user_text, send_reply, log,
+        customer_name=customer_name,
+    )

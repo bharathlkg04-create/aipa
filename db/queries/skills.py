@@ -48,9 +48,12 @@ async def get_relevant_skills(
                 ORDER BY s.embedding <=> $2::vector
                 LIMIT $3
             )
-            SELECT name, description, prompt_snippet FROM pinned
-            UNION ALL
-            SELECT name, description, prompt_snippet FROM ranked
+            SELECT name, description, prompt_snippet
+            FROM (
+                SELECT * FROM pinned
+                UNION ALL
+                SELECT * FROM ranked
+            ) combined
             ORDER BY sort_rank
             """,
             business_id,
