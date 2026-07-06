@@ -1,6 +1,8 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 import structlog
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -20,16 +22,38 @@ from aipa.whatsapp.router import router as whatsapp_router
 logger = structlog.get_logger(__name__)
 
 
+async def _keep_waha_awake(waha_url: str, api_key: str) -> None:
+    """Ping the WAHA bridge every 10 minutes so the free-tier instance
+    doesn't idle out while this app is awake."""
+    headers = {"X-Api-Key": api_key} if api_key else {}
+    url = f"{waha_url.rstrip('/')}/api/server/version"
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                await client.get(url, headers=headers)
+        except httpx.HTTPError:
+            pass  # asleep or restarting — the GET itself triggers the wake
+        await asyncio.sleep(600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(settings.LOG_LEVEL)
 
     app.state.db_pool = await create_pool()
+
+    keepalive = None
+    if settings.WAHA_URL:
+        keepalive = asyncio.create_task(
+            _keep_waha_awake(settings.WAHA_URL, settings.WAHA_API_KEY)
+        )
     logger.info("aipa_started", environment=settings.ENVIRONMENT)
 
     yield
 
+    if keepalive:
+        keepalive.cancel()
     await app.state.db_pool.close()
     logger.info("aipa_stopped")
 

@@ -585,12 +585,14 @@ async function waPoll() {
   }
 }
 
-async function waConnect() {
+async function waConnect(attempt = 1) {
   const auth = getAuth();
   const btn = $("wa-connect-btn");
   btn.disabled = true;
   waStopPolling(); waHideQr();
-  msg("wa-status", "warn", "Starting WhatsApp session…");
+  msg("wa-status", "warn", attempt === 1
+    ? "Starting WhatsApp session…"
+    : "Bridge is waking — retrying (attempt " + attempt + " of 4)…");
   try {
     await api("/api/whatsapp/connect", {
       method: "POST",
@@ -604,10 +606,21 @@ async function waConnect() {
         msg("wa-status", "warn", "QR expired / timed out — click Connect to try again.");
       }
     }, 180000);
-  } catch (e) {
-    msg("wa-status", "err", "Connect failed: " + e.message);
-  } finally {
     btn.disabled = false;
+  } catch (e) {
+    // The free-tier bridge takes ~30-60s to cold-start; keep retrying for the user
+    if (/waking|waking up|unreachable|502|503/i.test(e.message) && attempt < 4) {
+      let secs = 20;
+      msg("wa-status", "warn", "WhatsApp bridge is waking up — retrying in " + secs + "s…");
+      const tick = setInterval(() => {
+        secs--;
+        if (secs > 0) msg("wa-status", "warn", "WhatsApp bridge is waking up — retrying in " + secs + "s…");
+      }, 1000);
+      setTimeout(() => { clearInterval(tick); waConnect(attempt + 1); }, 20000);
+    } else {
+      msg("wa-status", "err", "Connect failed: " + e.message);
+      btn.disabled = false;
+    }
   }
 }
 
