@@ -135,6 +135,7 @@ async def process_whatsapp_message(
         business_id=str(channel["business_id"]),
         channel_type="whatsapp",
         chat_id=chat_id,
+        customer_name=customer_name,
     )
 
     async def send_reply(text: str) -> None:

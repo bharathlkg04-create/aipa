@@ -57,6 +57,23 @@ async def _get_or_create_wa_channel(pool, business_id: str):
         )
 
 
+def _extract_push_name(payload: dict) -> str | None:
+    """The sender's WhatsApp display name. Field depends on the WAHA engine:
+    WEBJS uses notifyName, NOWEB (Baileys) uses pushName, GOWS uses Info.PushName."""
+    raw = payload.get("_data") or {}
+    info = raw.get("Info") or {}
+    for candidate in (
+        payload.get("notifyName"),
+        payload.get("pushName"),
+        raw.get("notifyName"),
+        raw.get("pushName"),
+        info.get("PushName"),
+    ):
+        if candidate and isinstance(candidate, str):
+            return candidate.strip()[:80]
+    return None
+
+
 # ── Inbound webhook (called by WAHA) ─────────────────────────────────────────
 
 @router.post("/webhook/whatsapp/{channel_token}", status_code=200)
@@ -88,9 +105,7 @@ async def whatsapp_webhook(
 
     from aipa.conversations.manager import process_whatsapp_message
 
-    # WhatsApp push name of the sender (WAHA exposes it as notifyName)
-    raw = payload.get("_data") or {}
-    customer_name = payload.get("notifyName") or raw.get("notifyName") or None
+    customer_name = _extract_push_name(payload)
 
     background_tasks.add_task(
         process_whatsapp_message,
