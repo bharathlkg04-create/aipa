@@ -592,7 +592,7 @@ async function waConnect(attempt = 1) {
   waStopPolling(); waHideQr();
   msg("wa-status", "warn", attempt === 1
     ? "Starting WhatsApp session…"
-    : "Bridge is waking — retrying (attempt " + attempt + " of 4)…");
+    : "Bridge is waking — retrying (attempt " + attempt + " of 6)…");
   try {
     await api("/api/whatsapp/connect", {
       method: "POST",
@@ -609,7 +609,7 @@ async function waConnect(attempt = 1) {
     btn.disabled = false;
   } catch (e) {
     // The free-tier bridge takes ~30-60s to cold-start; keep retrying for the user
-    if (/waking|waking up|unreachable|502|503/i.test(e.message) && attempt < 4) {
+    if (/waking|waking up|unreachable|502|503|network/i.test(e.message) && attempt < 6) {
       let secs = 20;
       msg("wa-status", "warn", "WhatsApp bridge is waking up — retrying in " + secs + "s…");
       const tick = setInterval(() => {

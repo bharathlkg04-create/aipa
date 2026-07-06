@@ -81,4 +81,7 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "index.html")
+    # no-cache so browsers always see the latest asset version query strings
+    return FileResponse(
+        _STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"}
+    )

@@ -1,8 +1,12 @@
+import asyncio
 import time
 from uuid import UUID
 
+import httpx
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+
+from aipa.config import get_settings
 
 from aipa.core.auth import verify_owner
 from aipa.core.encryption import encrypt_api_key
@@ -49,6 +53,21 @@ async def _cached_bot_info(bot_token: str) -> dict | None:
     return bot if bot is not None else (cached[1] if cached else None)
 
 
+async def _nudge_waha_awake() -> None:
+    """Fire-and-forget wake ping so the WhatsApp bridge is warm by the time
+    the owner reaches the Channels tab. Errors are irrelevant — the request
+    itself is what triggers the free instance to boot."""
+    settings = get_settings()
+    headers = {"X-Api-Key": settings.WAHA_API_KEY} if settings.WAHA_API_KEY else {}
+    try:
+        async with httpx.AsyncClient(timeout=75) as client:
+            await client.get(
+                f"{settings.WAHA_URL.rstrip('/')}/api/server/version", headers=headers
+            )
+    except httpx.HTTPError:
+        pass
+
+
 @router.get("/account")
 async def get_account(
     business_id: str = Query(...),
@@ -57,6 +76,10 @@ async def get_account(
 ) -> dict:
     business_id = _validate_uuid(business_id, "business_id")
     await verify_owner(pool, business_id, x_owner_token)
+
+    # Opening the dashboard starts waking the WhatsApp bridge in the background
+    if get_settings().WAHA_URL:
+        asyncio.create_task(_nudge_waha_awake())
 
     business = await get_business(pool, business_id)
     if business is None:
