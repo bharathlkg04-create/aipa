@@ -41,14 +41,27 @@ function loadClerk(pk) {
   });
 }
 
-async function api(path, options = {}) {
-  const auth = getAuth();
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+// Single source of truth for request credentials: Clerk session token
+// and/or the legacy owner token. EVERY authenticated request — including
+// raw fetch() calls for binary responses like the WhatsApp QR — must use
+// this, never build auth headers by hand.
+async function authHeaders() {
+  const headers = {};
   if (_clerk && _clerk.session) {
     const t = await _clerk.session.getToken();
     if (t) headers["Authorization"] = "Bearer " + t;
   }
+  const auth = getAuth();
   if (auth && auth.ownerToken) headers["X-Owner-Token"] = auth.ownerToken;
+  return headers;
+}
+
+async function api(path, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(await authHeaders()),
+    ...(options.headers || {}),
+  };
 
   // Free-tier hosting throws transient 502/503s (cold starts, restarts) —
   // retry idempotent GETs a couple of times before giving up.
@@ -659,8 +672,14 @@ async function waShowQr() {
   const auth = getAuth();
   try {
     const r = await fetch("/api/whatsapp/qr?business_id=" + encodeURIComponent(auth.businessId), {
-      headers: { "X-Owner-Token": auth.ownerToken },
+      headers: await authHeaders(),
     });
+    if (r.status === 401 || r.status === 403) {
+      // Auth problem is not transient — stop polling and tell the user
+      waStopPolling(); waHideQr();
+      msg("wa-status", "err", "Sign-in expired — refresh the page and click Connect again.");
+      return;
+    }
     if (!r.ok) return; // not ready yet — next poll retries
     const blob = await r.blob();
     if (_waQrUrl) URL.revokeObjectURL(_waQrUrl);
