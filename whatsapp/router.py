@@ -42,8 +42,9 @@ async def _get_or_create_wa_channel(pool, business_id: str):
         return channel
 
     settings = get_settings()
-    # WAHA Core (free) only runs the single session named "default";
-    # per-business sessions need WAHA Plus (WAHA_MULTI_SESSION=true).
+    # Each business gets its own WAHA session (WAHA ≥ 2026.6.1 allows
+    # unlimited sessions for free); the single shared session "default"
+    # is kept only for older WAHA images.
     session = f"wa-{secrets.token_hex(6)}" if settings.WAHA_MULTI_SESSION else "default"
     try:
         return await create_channel(
@@ -53,7 +54,7 @@ async def _get_or_create_wa_channel(pool, business_id: str):
         raise HTTPException(
             status_code=409,
             detail="WhatsApp session 'default' is already linked to another business. "
-            "Set WAHA_MULTI_SESSION=true (requires WAHA Plus) for multiple numbers.",
+            "Set WAHA_MULTI_SESSION=true to give every business its own number.",
         )
 
 

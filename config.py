@@ -20,12 +20,13 @@ class Settings(BaseSettings):
     MAX_SKILLS_IN_PROMPT: int = 5
 
     # WhatsApp bridge (WAHA — https://waha.devlike.pro). Leave WAHA_URL empty
-    # to disable WhatsApp. WAHA Core (free) supports only the single session
-    # "default"; set WAHA_MULTI_SESSION=true with WAHA Plus for per-business
-    # sessions.
+    # to disable WhatsApp. Since WAHA 2026.6.1 the free image supports
+    # unlimited sessions, so every business gets its own QR-linked number.
+    # Set WAHA_MULTI_SESSION=false only for older WAHA images that are
+    # limited to the single session "default".
     WAHA_URL: str = ""
     WAHA_API_KEY: str = ""
-    WAHA_MULTI_SESSION: bool = False
+    WAHA_MULTI_SESSION: bool = True
 
     ENVIRONMENT: str = "production"
     LOG_LEVEL: str = "INFO"
