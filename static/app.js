@@ -671,6 +671,26 @@ async function replaceKey() {
 }
 
 // ── Personality tab ──────────────────────────────────────────────────────────
+function fillTimezoneSelect(selectId, selected) {
+  const sel = $(selectId);
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let zones = ["UTC"];
+  try {
+    zones = Intl.supportedValuesOf("timeZone");
+  } catch (e) {
+    if (browserTz) zones.push(browserTz);
+  }
+  sel.innerHTML = "";
+  for (const z of zones) {
+    const opt = document.createElement("option");
+    opt.value = z;
+    opt.textContent = z.replace(/_/g, " ");
+    sel.appendChild(opt);
+  }
+  sel.value = selected || browserTz || "UTC";
+  if (!sel.value) sel.value = "UTC";
+}
+
 async function renderPersonality() {
   try {
     const acc = await loadAccount(true);
@@ -680,6 +700,7 @@ async function renderPersonality() {
     $("p-temp").value = temp;
     $("p-temp-val").textContent = temp;
     $("p-prompt").value = cfg.system_prompt_override || "";
+    fillTimezoneSelect("p-timezone", cfg.timezone);
   } catch (e) {
     msg("p-msg", "err", "Error: " + e.message);
   }
@@ -698,6 +719,7 @@ async function savePersonality() {
         llm_model: model,
         temperature: parseFloat($("p-temp").value),
         system_prompt: $("p-prompt").value.trim() || null,
+        timezone: $("p-timezone").value || null,
       }),
     });
     msg("p-msg", "ok", "✓ Personality saved — takes effect on the next customer message.");

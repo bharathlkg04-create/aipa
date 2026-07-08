@@ -87,19 +87,24 @@ async def save_boss_config(
     llm_model: str,
     temperature: float,
     system_prompt: str | None,
+    timezone: str | None = None,
 ) -> None:
+    # timezone is COALESCEd so callers that don't send one (e.g. re-running
+    # setup) keep the business's existing setting instead of clearing it
     async with pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO boss_config (business_id, llm_model, temperature, system_prompt_override)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO boss_config (business_id, llm_model, temperature, system_prompt_override, timezone)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (business_id) DO UPDATE
             SET llm_model = EXCLUDED.llm_model,
                 temperature = EXCLUDED.temperature,
-                system_prompt_override = EXCLUDED.system_prompt_override
+                system_prompt_override = EXCLUDED.system_prompt_override,
+                timezone = COALESCE(EXCLUDED.timezone, boss_config.timezone)
             """,
             business_id,
             llm_model,
             temperature,
             system_prompt,
+            timezone,
         )

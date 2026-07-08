@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI'PA — Your AI Assistant</title>
-  <link rel="stylesheet" href="/static/style.css?v=7" />
+  <link rel="stylesheet" href="/static/style.css?v=8" />
 </head>
 <body>
 
@@ -185,6 +185,10 @@
         <div class="range-labels"><span>Precise</span><span>Creative</span></div>
       </div>
       <div class="field">
+        <label>Timezone <span class="hint">(so your assistant knows the local date &amp; time)</span></label>
+        <select id="p-timezone" class="model-select"></select>
+      </div>
+      <div class="field">
         <label>Personality &amp; instructions <span class="hint">(system prompt)</span></label>
         <textarea id="p-prompt" rows="6"
           placeholder="You are the friendly assistant for {business}. Be warm, concise, and always offer to book an appointment."></textarea>
@@ -197,6 +201,6 @@
   <footer class="footer">AI'PA · FastAPI + Supabase + LiteLLM · <a href="/dev">developer console</a></footer>
 </div>
 
-<script src="/static/app.js?v=7"></script>
+<script src="/static/app.js?v=8"></script>
 </body>
 </html>

@@ -7,7 +7,7 @@ async def get_boss_config(
     async with pool.acquire() as conn:
         return await conn.fetchrow(
             """
-            SELECT system_prompt_override, llm_model, temperature
+            SELECT system_prompt_override, llm_model, temperature, timezone
             FROM boss_config
             WHERE business_id = $1
             LIMIT 1

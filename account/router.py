@@ -1,6 +1,7 @@
 import asyncio
 import time
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import httpx
 import structlog
@@ -133,8 +134,16 @@ async def update_config(
     await verify_owner(pool, business_id, x_owner_token)
 
     system_prompt = payload.system_prompt.strip() if payload.system_prompt else None
+
+    tz = payload.timezone.strip() if payload.timezone else None
+    if tz:
+        try:
+            ZoneInfo(tz)
+        except (KeyError, ValueError):
+            raise HTTPException(status_code=400, detail=f"Unknown timezone: {tz}")
+
     await save_boss_config(
-        pool, business_id, payload.llm_model, payload.temperature, system_prompt
+        pool, business_id, payload.llm_model, payload.temperature, system_prompt, tz
     )
     logger.info("config_updated", business_id=business_id, model=payload.llm_model)
     return {"ok": True}

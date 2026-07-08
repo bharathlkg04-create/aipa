@@ -6,6 +6,7 @@ class UpdateConfigRequest(BaseModel):
     llm_model: str = Field(min_length=1, max_length=100)
     temperature: float = Field(ge=0.0, le=2.0)
     system_prompt: str | None = Field(default=None, max_length=4000)
+    timezone: str | None = Field(default=None, max_length=64)
 
 
 class ReplaceApiKeyRequest(BaseModel):
