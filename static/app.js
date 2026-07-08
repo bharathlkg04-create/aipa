@@ -20,10 +20,35 @@ function msg(id, kind, text) {
   el.textContent = text || "";
 }
 
+// ── Clerk (optional hosted auth) ─────────────────────────────────────────────
+let _clerk = null; // window.Clerk once loaded, else null (legacy mode)
+
+function clerkFrontendApi(pk) {
+  // pk_test_<base64(domain + "$")> → domain
+  const encoded = pk.split("_").slice(2).join("_");
+  return atob(encoded).replace(/\$$/, "");
+}
+
+function loadClerk(pk) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://" + clerkFrontendApi(pk) + "/npm/@clerk/clerk-js@5/dist/clerk.browser.js";
+    s.setAttribute("data-clerk-publishable-key", pk);
+    s.crossOrigin = "anonymous";
+    s.onload = () => window.Clerk.load().then(() => resolve(window.Clerk), reject);
+    s.onerror = () => reject(new Error("Could not load the sign-in widget"));
+    document.head.appendChild(s);
+  });
+}
+
 async function api(path, options = {}) {
   const auth = getAuth();
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (auth) headers["X-Owner-Token"] = auth.ownerToken;
+  if (_clerk && _clerk.session) {
+    const t = await _clerk.session.getToken();
+    if (t) headers["Authorization"] = "Bearer " + t;
+  }
+  if (auth && auth.ownerToken) headers["X-Owner-Token"] = auth.ownerToken;
 
   // Free-tier hosting throws transient 502/503s (cold starts, restarts) —
   // retry idempotent GETs a couple of times before giving up.
@@ -90,9 +115,59 @@ function setModel(selectId, customId, model) {
 }
 
 // ── Views & tabs ─────────────────────────────────────────────────────────────
+function _authCards(visible) {
+  ["card-clerk", "card-create", "card-login", "card-link"].forEach((id) => {
+    $(id).hidden = !visible.includes(id);
+  });
+}
+
 function showAuthView() {
   $("view-auth").hidden = false;
   $("view-app").hidden = true;
+  $("auth-user-bar").hidden = true;
+  _authCards(["card-create", "card-login"]); // legacy mode
+}
+
+function showClerkSignIn() {
+  $("view-auth").hidden = false;
+  $("view-app").hidden = true;
+  $("auth-user-bar").hidden = true;
+  _authCards(["card-clerk"]);
+  _clerk.mountSignIn($("clerk-mount"));
+}
+
+function showOnboarding() {
+  // Signed in with Clerk but no business yet: create one or link one.
+  $("view-auth").hidden = false;
+  $("view-app").hidden = true;
+  const email = _clerk.user.primaryEmailAddress
+    ? _clerk.user.primaryEmailAddress.emailAddress : "";
+  const bar = $("auth-user-bar");
+  bar.hidden = false;
+  bar.textContent = "✓ Signed in" + (email ? " as " + email : "") +
+    " — now create your assistant (or link an existing one).";
+  _authCards(["card-create", "card-link"]);
+  // If this browser has a legacy session, prefill the link form: migrating
+  // becomes a single click.
+  const legacy = getAuth();
+  if (legacy && legacy.ownerToken) {
+    $("lk-business").value = legacy.businessId || "";
+    $("lk-owner").value = legacy.ownerToken;
+  }
+}
+
+async function onClerkSignedIn() {
+  try {
+    const d = await api("/api/auth/my-business");
+    if (d.business) {
+      setAuth({ mode: "clerk", businessId: d.business.id, businessName: d.business.name });
+      showAppView();
+    } else {
+      showOnboarding();
+    }
+  } catch (e) {
+    msg("clerk-msg", "err", "Error: " + e.message);
+  }
 }
 
 function showAppView() {
@@ -131,6 +206,11 @@ function signOut() {
   waStopPolling();
   clearAuth();
   _account = null;
+  if (_clerk && _clerk.user) {
+    // Full page reload after Clerk sign-out gives a clean re-boot
+    _clerk.signOut().then(() => location.reload());
+    return;
+  }
   showAuthView();
 }
 
@@ -192,10 +272,17 @@ async function doSetup() {
       method: "POST",
       body: JSON.stringify({ bot_token: token, api_key: apikey, model, business_name: name }),
     });
-    setAuth({ businessId: d.business_id, ownerToken: d.owner_token, businessName: name });
-    msg("su-msg", "ok", "✓ Connected! Owner token saved in this browser:\n" + d.owner_token +
-        "\nCopy it somewhere safe — it is your password.");
-    setTimeout(showAppView, 1600);
+    if (d.linked) {
+      // Business is bound to the signed-in account — email login from now on.
+      setAuth({ mode: "clerk", businessId: d.business_id, businessName: name });
+      msg("su-msg", "ok", "✓ Connected! Your business is linked to your account.");
+      setTimeout(showAppView, 900);
+    } else {
+      setAuth({ businessId: d.business_id, ownerToken: d.owner_token, businessName: name });
+      msg("su-msg", "ok", "✓ Connected! Owner token saved in this browser:\n" + d.owner_token +
+          "\nCopy it somewhere safe — it is your password.");
+      setTimeout(showAppView, 1600);
+    }
   } catch (e) {
     msg("su-msg", "err", "Setup failed: " + e.message);
   } finally {
@@ -223,6 +310,29 @@ async function doLogin() {
     setTimeout(showAppView, 500);
   } catch (e) {
     msg("li-msg", "err", "Sign-in failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doLink() {
+  const businessId = $("lk-business").value.trim();
+  const ownerToken = $("lk-owner").value.trim();
+  if (!businessId || !ownerToken) return msg("lk-msg", "err", "Both fields are required.");
+
+  const btn = $("lk-btn");
+  btn.disabled = true;
+  msg("lk-msg", "warn", "Linking…");
+  try {
+    const d = await api("/api/auth/link", {
+      method: "POST",
+      body: JSON.stringify({ business_id: businessId, owner_token: ownerToken }),
+    });
+    setAuth({ mode: "clerk", businessId: d.business.id, businessName: d.business.name });
+    msg("lk-msg", "ok", "✓ Linked " + d.business.name + " — owner token no longer needed.");
+    setTimeout(showAppView, 900);
+  } catch (e) {
+    msg("lk-msg", "err", "Link failed: " + e.message);
   } finally {
     btn.disabled = false;
   }
@@ -729,7 +839,40 @@ async function savePersonality() {
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
-fillModelSelect("su-model", "su-model-custom");
-fillModelSelect("p-model", "p-model-custom");
-if (getAuth()) showAppView();
-else showAuthView();
+async function boot() {
+  fillModelSelect("su-model", "su-model-custom");
+  fillModelSelect("p-model", "p-model-custom");
+
+  let pk = "";
+  try {
+    const cfg = await api("/api/public-config");
+    pk = (cfg && cfg.clerk_publishable_key) || "";
+  } catch { /* backend without Clerk support — legacy mode */ }
+
+  if (pk) {
+    try {
+      _clerk = await loadClerk(pk);
+    } catch (e) {
+      _clerk = null; // widget unreachable — fall back to legacy login
+    }
+  }
+
+  if (_clerk) {
+    // React to sign-in/sign-out happening inside the mounted widget
+    let lastUserId = _clerk.user ? _clerk.user.id : null;
+    _clerk.addListener(({ user }) => {
+      const id = user ? user.id : null;
+      if (id && id !== lastUserId) { lastUserId = id; onClerkSignedIn(); }
+      if (!id) lastUserId = null;
+    });
+    if (_clerk.user) return onClerkSignedIn();
+    // A legacy owner-token session keeps working even with Clerk enabled
+    if (getAuth() && getAuth().ownerToken) return showAppView();
+    return showClerkSignIn();
+  }
+
+  if (getAuth()) showAppView();
+  else showAuthView();
+}
+
+boot();

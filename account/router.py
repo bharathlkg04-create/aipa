@@ -10,14 +10,23 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from aipa.config import get_settings
 
 from aipa.core.auth import verify_owner
+from aipa.core.clerk import verify_clerk_token
 from aipa.core.encryption import encrypt_api_key
 from aipa.db.queries.api_keys import get_api_key_meta
 from aipa.db.queries.boss_config import get_boss_config
-from aipa.db.queries.businesses import get_business
+from aipa.db.queries.businesses import (
+    get_business,
+    get_business_by_clerk_user,
+    link_clerk_user,
+)
 from aipa.db.queries.channels import list_channels
 from aipa.db.queries.setup import save_api_key, save_boss_config
 from aipa.dependencies import get_db, get_fernet
-from aipa.account.schemas import ReplaceApiKeyRequest, UpdateConfigRequest
+from aipa.account.schemas import (
+    LinkBusinessRequest,
+    ReplaceApiKeyRequest,
+    UpdateConfigRequest,
+)
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["account"])
@@ -69,14 +78,65 @@ async def _nudge_waha_awake() -> None:
         pass
 
 
+@router.get("/public-config")
+async def public_config() -> dict:
+    """Unauthenticated bootstrap config for the SPA (public values only)."""
+    return {"clerk_publishable_key": get_settings().CLERK_PUBLISHABLE_KEY}
+
+
+@router.get("/auth/my-business")
+async def my_business(
+    pool=Depends(get_db),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """The business linked to the signed-in Clerk user, if any."""
+    clerk_user_id = await verify_clerk_token(authorization)
+    row = await get_business_by_clerk_user(pool, clerk_user_id)
+    return {
+        "ok": True,
+        "business": {"id": str(row["id"]), "name": row["name"]} if row else None,
+    }
+
+
+@router.post("/auth/link")
+async def link_business(
+    payload: LinkBusinessRequest,
+    pool=Depends(get_db),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """One-time migration: bind an existing owner-token business to the
+    signed-in Clerk user. Afterwards the owner token is only a backup."""
+    clerk_user_id = await verify_clerk_token(authorization)
+    business_id = _validate_uuid(payload.business_id, "business_id")
+    await verify_owner(pool, business_id, payload.owner_token)
+
+    outcome = await link_clerk_user(pool, business_id, clerk_user_id)
+    if outcome == "business_taken":
+        raise HTTPException(
+            status_code=409, detail="This business is already linked to another account"
+        )
+    if outcome == "user_taken":
+        raise HTTPException(
+            status_code=409, detail="Your account is already linked to another business"
+        )
+
+    business = await get_business(pool, business_id)
+    logger.info("clerk_business_linked", business_id=business_id)
+    return {
+        "ok": True,
+        "business": {"id": business_id, "name": business["name"] if business else ""},
+    }
+
+
 @router.get("/account")
 async def get_account(
     business_id: str = Query(...),
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     business_id = _validate_uuid(business_id, "business_id")
-    await verify_owner(pool, business_id, x_owner_token)
+    await verify_owner(pool, business_id, x_owner_token, authorization)
 
     # Opening the dashboard starts waking the WhatsApp bridge in the background
     if get_settings().WAHA_URL:
@@ -129,9 +189,10 @@ async def update_config(
     payload: UpdateConfigRequest,
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     business_id = _validate_uuid(payload.business_id, "business_id")
-    await verify_owner(pool, business_id, x_owner_token)
+    await verify_owner(pool, business_id, x_owner_token, authorization)
 
     system_prompt = payload.system_prompt.strip() if payload.system_prompt else None
 
@@ -154,9 +215,10 @@ async def replace_api_key(
     payload: ReplaceApiKeyRequest,
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     business_id = _validate_uuid(payload.business_id, "business_id")
-    await verify_owner(pool, business_id, x_owner_token)
+    await verify_owner(pool, business_id, x_owner_token, authorization)
 
     provider = payload.provider
     if not provider:

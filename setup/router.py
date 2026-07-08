@@ -1,9 +1,11 @@
 import httpx
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from aipa.config import get_settings
+from aipa.core.clerk import clerk_enabled, verify_clerk_token
 from aipa.core.encryption import encrypt_api_key
+from aipa.db.queries.businesses import link_clerk_user
 from aipa.db.queries.setup import (
     get_or_create_business_and_channel,
     save_api_key,
@@ -32,15 +34,37 @@ async def setup_business(
     payload: SetupRequest,
     request: Request,
     pool=Depends(get_db),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     fernet = get_fernet()
     settings = get_settings()
+
+    # Resolve the Clerk user up front so a bad session fails before we
+    # create anything.
+    clerk_user_id = None
+    if authorization and clerk_enabled():
+        clerk_user_id = await verify_clerk_token(authorization)
 
     result = await get_or_create_business_and_channel(
         pool, payload.bot_token, payload.business_name
     )
     business_id = result["business_id"]
     webhook_secret = result["webhook_secret"]
+
+    linked = False
+    if clerk_user_id:
+        outcome = await link_clerk_user(pool, business_id, clerk_user_id)
+        if outcome == "business_taken":
+            raise HTTPException(
+                status_code=409,
+                detail="This bot is already registered to another account.",
+            )
+        if outcome == "user_taken":
+            raise HTTPException(
+                status_code=409,
+                detail="Your account already has a business. One business per account for now.",
+            )
+        linked = True
 
     encrypted = encrypt_api_key(fernet, payload.api_key)
     provider = payload.model.split("/")[0] if "/" in payload.model else "openai"
@@ -77,4 +101,5 @@ async def setup_business(
         "business_id": business_id,
         "webhook_url": webhook_url,
         "owner_token": result["owner_token"],
+        "linked": linked,
     }

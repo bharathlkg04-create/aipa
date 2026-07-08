@@ -68,10 +68,11 @@ async def toggle_skill(
     payload: ToggleSkillRequest,
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     skill_id = _validate_uuid(skill_id, "skill_id")
     business_id = _validate_uuid(payload.business_id, "business_id")
-    await _verify_owner(pool, business_id, x_owner_token)
+    await _verify_owner(pool, business_id, x_owner_token, authorization)
 
     found = await set_skill_enabled(
         pool, business_id, skill_id, payload.is_enabled, payload.is_pinned
@@ -94,9 +95,10 @@ async def enable_pack(
     payload: EnablePackRequest,
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     business_id = _validate_uuid(payload.business_id, "business_id")
-    await _verify_owner(pool, business_id, x_owner_token)
+    await _verify_owner(pool, business_id, x_owner_token, authorization)
 
     enabled = await enable_industry_pack(
         pool, business_id, payload.industry, payload.pack_size

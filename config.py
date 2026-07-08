@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     WAHA_API_KEY: str = ""
     WAHA_MULTI_SESSION: bool = True
 
+    # Clerk authentication (https://clerk.com). The publishable key is public;
+    # it both configures the sign-in widget and identifies the instance whose
+    # JWKS verifies session tokens. Empty = Clerk sign-in disabled (legacy
+    # owner-token login only).
+    CLERK_PUBLISHABLE_KEY: str = ""
+
     ENVIRONMENT: str = "production"
     LOG_LEVEL: str = "INFO"
     PORT: int = 8000

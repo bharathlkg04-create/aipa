@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI'PA — Your AI Assistant</title>
-  <link rel="stylesheet" href="/static/style.css?v=8" />
+  <link rel="stylesheet" href="/static/style.css?v=9" />
 </head>
 <body>
 
@@ -16,8 +16,16 @@
     <p>Deploy an AI assistant for your business on Telegram &amp; WhatsApp — with your own LLM key.</p>
   </div>
 
+  <div id="auth-user-bar" class="form-msg ok" style="text-align:center;" hidden></div>
+
   <div class="auth-cards">
-    <div class="card auth-card">
+    <div class="card auth-card" id="card-clerk" hidden>
+      <h2>Sign in or create an account</h2>
+      <div id="clerk-mount"></div>
+      <div id="clerk-msg" class="form-msg"></div>
+    </div>
+
+    <div class="card auth-card" id="card-create">
       <h2>Create your assistant</h2>
       <div class="field">
         <label>Business name</label>
@@ -41,7 +49,7 @@
       <div id="su-msg" class="form-msg"></div>
     </div>
 
-    <div class="card auth-card">
+    <div class="card auth-card" id="card-login">
       <h2>I already have an account</h2>
       <div class="field">
         <label>Business ID</label>
@@ -53,6 +61,22 @@
       </div>
       <button class="btn btn-primary" id="li-btn" onclick="doLogin()">Sign in</button>
       <div id="li-msg" class="form-msg"></div>
+    </div>
+
+    <div class="card auth-card" id="card-link" hidden>
+      <h2>Link an existing business</h2>
+      <p class="channel-desc">Made your assistant before sign-in existed? Enter its
+        Business ID and owner token once — from then on you just sign in.</p>
+      <div class="field">
+        <label>Business ID</label>
+        <input id="lk-business" placeholder="xxxxxxxx-xxxx-…" />
+      </div>
+      <div class="field">
+        <label>Owner token</label>
+        <input id="lk-owner" type="password" placeholder="Shown once at setup" />
+      </div>
+      <button class="btn btn-primary" id="lk-btn" onclick="doLink()">Link business</button>
+      <div id="lk-msg" class="form-msg"></div>
     </div>
   </div>
 </div>
@@ -201,6 +225,6 @@
   <footer class="footer">AI'PA · FastAPI + Supabase + LiteLLM · <a href="/dev">developer console</a></footer>
 </div>
 
-<script src="/static/app.js?v=8"></script>
+<script src="/static/app.js?v=9"></script>
 </body>
 </html>

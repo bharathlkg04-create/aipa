@@ -13,3 +13,8 @@ class ReplaceApiKeyRequest(BaseModel):
     business_id: str
     api_key: str = Field(min_length=8, max_length=500)
     provider: str | None = Field(default=None, max_length=40)
+
+
+class LinkBusinessRequest(BaseModel):
+    business_id: str
+    owner_token: str = Field(min_length=8, max_length=200)

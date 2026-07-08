@@ -127,9 +127,10 @@ async def connect_whatsapp(
     request: Request,
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     business_id = _validate_uuid(payload.business_id, "business_id")
-    await verify_owner(pool, business_id, x_owner_token)
+    await verify_owner(pool, business_id, x_owner_token, authorization)
 
     channel = await _get_or_create_wa_channel(pool, business_id)
     session = channel["channel_token"]
@@ -150,9 +151,10 @@ async def whatsapp_status(
     business_id: str = Query(...),
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     business_id = _validate_uuid(business_id, "business_id")
-    await verify_owner(pool, business_id, x_owner_token)
+    await verify_owner(pool, business_id, x_owner_token, authorization)
 
     channel = await get_channel_by_business(pool, business_id, "whatsapp")
     if channel is None:
@@ -178,9 +180,10 @@ async def whatsapp_qr(
     business_id: str = Query(...),
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> Response:
     business_id = _validate_uuid(business_id, "business_id")
-    await verify_owner(pool, business_id, x_owner_token)
+    await verify_owner(pool, business_id, x_owner_token, authorization)
 
     channel = await get_channel_by_business(pool, business_id, "whatsapp")
     if channel is None:
@@ -199,9 +202,10 @@ async def disconnect_whatsapp(
     payload: WhatsAppDisconnectRequest,
     pool=Depends(get_db),
     x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict:
     business_id = _validate_uuid(payload.business_id, "business_id")
-    await verify_owner(pool, business_id, x_owner_token)
+    await verify_owner(pool, business_id, x_owner_token, authorization)
 
     channel = await get_channel_by_business(pool, business_id, "whatsapp")
     if channel is None:
