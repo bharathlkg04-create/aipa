@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 from aipa.agent.schemas import AgentContext
 
 _DEFAULT_SYSTEM_PROMPT = (
@@ -15,6 +18,21 @@ def build_system_prompt(context: AgentContext, customer_name: str | None = None)
         else None
     ) or _DEFAULT_SYSTEM_PROMPT
     sections.append(base)
+
+    tz_name = (context.boss_config or {}).get("timezone")
+    now = datetime.now(timezone.utc)
+    tz_label = "UTC"
+    if tz_name:
+        try:
+            now = now.astimezone(ZoneInfo(tz_name))
+            tz_label = tz_name
+        except (KeyError, ValueError):
+            pass
+    sections.append(
+        f"## Current Date & Time\n"
+        f"It is {now.strftime('%A, %B %d, %Y at %H:%M')} ({tz_label}). "
+        "Use this for any date or time reasoning; never guess dates from memory."
+    )
 
     if customer_name:
         sections.append(
