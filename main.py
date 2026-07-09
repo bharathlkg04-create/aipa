@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from aipa.account.router import router as account_router
 from aipa.config import get_settings
+from aipa.conversations.router import router as conversations_router
 from aipa.core.health import router as health_router
 from aipa.db.client import create_pool
 from aipa.logging_config import configure_logging
@@ -69,6 +70,7 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(account_router)
+app.include_router(conversations_router)
 app.include_router(setup_router)
 app.include_router(skills_router)
 app.include_router(telegram_router)

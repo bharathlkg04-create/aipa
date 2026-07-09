@@ -28,11 +28,11 @@ class Settings(BaseSettings):
     WAHA_API_KEY: str = ""
     WAHA_MULTI_SESSION: bool = True
 
-    # Clerk authentication (https://clerk.com). The publishable key is public;
-    # it both configures the sign-in widget and identifies the instance whose
-    # JWKS verifies session tokens. Empty = Clerk sign-in disabled (legacy
-    # owner-token login only).
-    CLERK_PUBLISHABLE_KEY: str = ""
+    # Google Sign-In (Google Identity Services). The OAuth client id is
+    # public; it renders the official button and is the audience the ID
+    # tokens are verified against. Empty = Google sign-in disabled (legacy
+    # owner-token login only). No client secret is needed.
+    GOOGLE_CLIENT_ID: str = ""
 
     ENVIRONMENT: str = "production"
     LOG_LEVEL: str = "INFO"
@@ -42,6 +42,7 @@ class Settings(BaseSettings):
         env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",  # tolerate retired keys (e.g. CLERK_PUBLISHABLE_KEY) in .env
     )
 
 

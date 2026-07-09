@@ -18,7 +18,7 @@ httpx>=0.27.0
 # Encryption
 cryptography>=42.0.0
 
-# Clerk session-token verification (RS256 JWTs)
+# Google Sign-In ID-token verification (RS256 JWTs)
 PyJWT>=2.8.0
 
 # Logging

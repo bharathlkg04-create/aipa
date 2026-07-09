@@ -3,9 +3,9 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from aipa.config import get_settings
-from aipa.core.clerk import clerk_enabled, verify_clerk_token
 from aipa.core.encryption import encrypt_api_key
-from aipa.db.queries.businesses import link_clerk_user
+from aipa.core.google_auth import google_enabled, verify_google_bearer
+from aipa.db.queries.businesses import link_google_user
 from aipa.db.queries.setup import (
     get_or_create_business_and_channel,
     save_api_key,
@@ -39,11 +39,11 @@ async def setup_business(
     fernet = get_fernet()
     settings = get_settings()
 
-    # Resolve the Clerk user up front so a bad session fails before we
+    # Resolve the Google user up front so a bad session fails before we
     # create anything.
-    clerk_user_id = None
-    if authorization and clerk_enabled():
-        clerk_user_id = await verify_clerk_token(authorization)
+    google_user_id = None
+    if authorization and google_enabled():
+        google_user_id = await verify_google_bearer(authorization)
 
     result = await get_or_create_business_and_channel(
         pool, payload.bot_token, payload.business_name
@@ -52,8 +52,8 @@ async def setup_business(
     webhook_secret = result["webhook_secret"]
 
     linked = False
-    if clerk_user_id:
-        outcome = await link_clerk_user(pool, business_id, clerk_user_id)
+    if google_user_id:
+        outcome = await link_google_user(pool, business_id, google_user_id)
         if outcome == "business_taken":
             raise HTTPException(
                 status_code=409,

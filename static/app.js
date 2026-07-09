@@ -20,37 +20,64 @@ function msg(id, kind, text) {
   el.textContent = text || "";
 }
 
-// ── Clerk (optional hosted auth) ─────────────────────────────────────────────
-let _clerk = null; // window.Clerk once loaded, else null (legacy mode)
+// ── Google Sign-In (Google Identity Services) ────────────────────────────────
+// The official button yields a one-time ID token; POST /api/auth/google
+// verifies it and returns the business's owner session, which we store like
+// a normal login. The Google token is only kept in memory for the onboarding
+// calls (setup / link) made right after signing in.
+let _googleReady = false;   // GIS script loaded & initialized
+let _googleCred = null;     // ID token of the current sign-in, memory only
 
-function clerkFrontendApi(pk) {
-  // pk_test_<base64(domain + "$")> → domain
-  const encoded = pk.split("_").slice(2).join("_");
-  return atob(encoded).replace(/\$$/, "");
-}
-
-function loadClerk(pk) {
+function loadGoogleSignIn(clientId) {
   return new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://" + clerkFrontendApi(pk) + "/npm/@clerk/clerk-js@5/dist/clerk.browser.js";
-    s.setAttribute("data-clerk-publishable-key", pk);
-    s.crossOrigin = "anonymous";
-    s.onload = () => window.Clerk.load().then(() => resolve(window.Clerk), reject);
-    s.onerror = () => reject(new Error("Could not load the sign-in widget"));
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.onload = () => {
+      try {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: onGoogleCredential,
+        });
+        _googleReady = true;
+        resolve();
+      } catch (e) { reject(e); }
+    };
+    s.onerror = () => reject(new Error("Could not load Google sign-in"));
     document.head.appendChild(s);
   });
 }
 
-// Single source of truth for request credentials: Clerk session token
-// and/or the legacy owner token. EVERY authenticated request — including
-// raw fetch() calls for binary responses like the WhatsApp QR — must use
-// this, never build auth headers by hand.
+async function onGoogleCredential(response) {
+  _googleCred = response.credential;
+  msg("g-msg", "warn", "Checking your account…");
+  try {
+    const d = await api("/api/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential: _googleCred }),
+    });
+    if (d.linked) {
+      setAuth({
+        businessId: d.business.id,
+        ownerToken: d.business.owner_token,
+        businessName: d.business.name,
+      });
+      showAppView();
+    } else {
+      showOnboarding(d.email || "");
+    }
+  } catch (e) {
+    msg("g-msg", "err", "Sign-in failed: " + e.message);
+  }
+}
+
+// Single source of truth for request credentials: the owner token, plus the
+// one-time Google credential during onboarding. EVERY authenticated request —
+// including raw fetch() calls for binary responses like the WhatsApp QR —
+// must use this, never build auth headers by hand.
 async function authHeaders() {
   const headers = {};
-  if (_clerk && _clerk.session) {
-    const t = await _clerk.session.getToken();
-    if (t) headers["Authorization"] = "Bearer " + t;
-  }
+  if (_googleCred) headers["Authorization"] = "Bearer " + _googleCred;
   const auth = getAuth();
   if (auth && auth.ownerToken) headers["X-Owner-Token"] = auth.ownerToken;
   return headers;
@@ -129,7 +156,7 @@ function setModel(selectId, customId, model) {
 
 // ── Views & tabs ─────────────────────────────────────────────────────────────
 function _authCards(visible) {
-  ["card-clerk", "card-create", "card-login", "card-link"].forEach((id) => {
+  ["card-google", "card-create", "card-login", "card-link"].forEach((id) => {
     $(id).hidden = !visible.includes(id);
   });
 }
@@ -141,20 +168,20 @@ function showAuthView() {
   _authCards(["card-create", "card-login"]); // legacy mode
 }
 
-function showClerkSignIn() {
+function showGoogleSignIn() {
   $("view-auth").hidden = false;
   $("view-app").hidden = true;
   $("auth-user-bar").hidden = true;
-  _authCards(["card-clerk"]);
-  _clerk.mountSignIn($("clerk-mount"));
+  _authCards(["card-google", "card-login"]);
+  google.accounts.id.renderButton($("g-signin"), {
+    theme: "outline", size: "large", shape: "pill", width: 280,
+  });
 }
 
-function showOnboarding() {
-  // Signed in with Clerk but no business yet: create one or link one.
+function showOnboarding(email) {
+  // Signed in with Google but no business yet: create one or link one.
   $("view-auth").hidden = false;
   $("view-app").hidden = true;
-  const email = _clerk.user.primaryEmailAddress
-    ? _clerk.user.primaryEmailAddress.emailAddress : "";
   const bar = $("auth-user-bar");
   bar.hidden = false;
   bar.textContent = "✓ Signed in" + (email ? " as " + email : "") +
@@ -166,20 +193,6 @@ function showOnboarding() {
   if (legacy && legacy.ownerToken) {
     $("lk-business").value = legacy.businessId || "";
     $("lk-owner").value = legacy.ownerToken;
-  }
-}
-
-async function onClerkSignedIn() {
-  try {
-    const d = await api("/api/auth/my-business");
-    if (d.business) {
-      setAuth({ mode: "clerk", businessId: d.business.id, businessName: d.business.name });
-      showAppView();
-    } else {
-      showOnboarding();
-    }
-  } catch (e) {
-    msg("clerk-msg", "err", "Error: " + e.message);
   }
 }
 
@@ -197,16 +210,32 @@ const TAB_LOADERS = {
   channels: loadChannels,
   keys: renderKeys,
   personality: renderPersonality,
+  conversations: loadConversations,
+  logs: loadLogs,
+};
+
+const PANELS = ["skills", "store", "channels", "keys", "personality", "conversations", "logs"];
+
+const PAGE_TITLES = {
+  skills: "Skills",
+  store: "Skill Store",
+  channels: "Channels",
+  keys: "API Keys",
+  personality: "Personality",
+  conversations: "Conversations",
+  logs: "Logs",
 };
 
 function switchTab(name) {
   document.querySelectorAll(".tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.tab === name)
   );
-  ["skills", "store", "channels", "keys", "personality"].forEach((p) => {
+  PANELS.forEach((p) => {
     $("panel-" + p).hidden = p !== name;
   });
+  $("page-title").textContent = PAGE_TITLES[name] || "";
   if (name !== "channels") waStopPolling();
+  closeSidebar(); // mobile: navigating closes the drawer
   (TAB_LOADERS[name] || (() => {}))();
 }
 
@@ -215,16 +244,32 @@ document.addEventListener("click", (e) => {
   if (tab) switchTab(tab.dataset.tab);
 });
 
+// ── Sidebar (collapsible group + mobile drawer) ──────────────────────────────
+function toggleNavGroup(e) {
+  const head = e.currentTarget;
+  head.classList.toggle("open");
+  $("nav-group-agent").classList.toggle("collapsed", !head.classList.contains("open"));
+}
+
+function openSidebar() {
+  $("sidebar").classList.add("open");
+  $("sidebar-scrim").classList.add("show");
+}
+
+function closeSidebar() {
+  $("sidebar").classList.remove("open");
+  $("sidebar-scrim").classList.remove("show");
+}
+
 function signOut() {
   waStopPolling();
   clearAuth();
   _account = null;
-  if (_clerk && _clerk.user) {
-    // Full page reload after Clerk sign-out gives a clean re-boot
-    _clerk.signOut().then(() => location.reload());
-    return;
+  _googleCred = null;
+  if (_googleReady) {
+    try { google.accounts.id.disableAutoSelect(); } catch (e) { /* non-fatal */ }
   }
-  showAuthView();
+  location.reload(); // clean re-boot of the auth view
 }
 
 // ── Bot token auto-recognition ───────────────────────────────────────────────
@@ -285,13 +330,12 @@ async function doSetup() {
       method: "POST",
       body: JSON.stringify({ bot_token: token, api_key: apikey, model, business_name: name }),
     });
+    setAuth({ businessId: d.business_id, ownerToken: d.owner_token, businessName: name });
     if (d.linked) {
-      // Business is bound to the signed-in account — email login from now on.
-      setAuth({ mode: "clerk", businessId: d.business_id, businessName: name });
-      msg("su-msg", "ok", "✓ Connected! Your business is linked to your account.");
+      // Business is bound to the signed-in Google account — Google login from now on.
+      msg("su-msg", "ok", "✓ Connected! Your business is linked to your Google account.");
       setTimeout(showAppView, 900);
     } else {
-      setAuth({ businessId: d.business_id, ownerToken: d.owner_token, businessName: name });
       msg("su-msg", "ok", "✓ Connected! Owner token saved in this browser:\n" + d.owner_token +
           "\nCopy it somewhere safe — it is your password.");
       setTimeout(showAppView, 1600);
@@ -341,8 +385,8 @@ async function doLink() {
       method: "POST",
       body: JSON.stringify({ business_id: businessId, owner_token: ownerToken }),
     });
-    setAuth({ mode: "clerk", businessId: d.business.id, businessName: d.business.name });
-    msg("lk-msg", "ok", "✓ Linked " + d.business.name + " — owner token no longer needed.");
+    setAuth({ businessId: d.business.id, ownerToken, businessName: d.business.name });
+    msg("lk-msg", "ok", "✓ Linked " + d.business.name + " — next time, Google sign-in is enough.");
     setTimeout(showAppView, 900);
   } catch (e) {
     msg("lk-msg", "err", "Link failed: " + e.message);
@@ -857,41 +901,223 @@ async function savePersonality() {
   }
 }
 
+// ── Conversations (inbox) ────────────────────────────────────────────────────
+const CH_ICON = { telegram: "✈️", whatsapp: "💬" };
+let _activeConvId = null;
+
+function convDisplayName(c) {
+  return c.customer_name || c.customer_id || "Unknown";
+}
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString([], { day: "numeric", month: "short" });
+}
+
+async function loadConversations() {
+  const auth = getAuth();
+  const list = $("conv-list");
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
+  try {
+    const d = await api(
+      "/api/conversations?business_id=" + encodeURIComponent(auth.businessId) + "&limit=100"
+    );
+    const convos = d.conversations || [];
+    $("conv-count").textContent = convos.length + (convos.length === 1 ? " chat" : " chats");
+    list.innerHTML = "";
+    if (!convos.length) {
+      list.innerHTML =
+        '<div class="empty-state"><div class="empty-icon">📭</div>' +
+        "<p>No conversations yet.<br>They appear here as soon as a customer messages your assistant.</p></div>";
+      return;
+    }
+    convos.forEach((c) => list.appendChild(renderConvItem(c)));
+  } catch (e) {
+    list.innerHTML = '<div class="empty-state">Error: ' + e.message + "</div>";
+  }
+}
+
+function renderConvItem(c) {
+  const item = document.createElement("button");
+  item.className = "conv-item" + (c.id === _activeConvId ? " active" : "");
+  item.dataset.convId = c.id;
+
+  const avatar = document.createElement("div");
+  avatar.className = "conv-avatar";
+  avatar.textContent = convDisplayName(c).charAt(0).toUpperCase();
+
+  const meta = document.createElement("div");
+  meta.className = "conv-meta";
+  const name = document.createElement("div");
+  name.className = "conv-name";
+  const ch = document.createElement("span");
+  ch.className = "ch";
+  ch.textContent = CH_ICON[c.channel] || "❓";
+  ch.title = c.channel;
+  name.appendChild(ch);
+  name.appendChild(document.createTextNode(convDisplayName(c)));
+  const preview = document.createElement("div");
+  preview.className = "conv-preview";
+  preview.textContent = c.last_message_preview
+    ? (c.last_message_role === "assistant" ? "You: " : "") + c.last_message_preview
+    : "No messages yet";
+  meta.appendChild(name);
+  meta.appendChild(preview);
+
+  const side = document.createElement("div");
+  side.className = "conv-side";
+  const time = document.createElement("div");
+  time.className = "conv-time";
+  time.textContent = fmtTime(c.last_message_at);
+  const count = document.createElement("span");
+  count.className = "conv-count";
+  count.textContent = c.message_count;
+  side.appendChild(time);
+  side.appendChild(count);
+
+  item.appendChild(avatar);
+  item.appendChild(meta);
+  item.appendChild(side);
+  item.onclick = () => openConversation(c);
+  return item;
+}
+
+async function openConversation(c) {
+  const auth = getAuth();
+  _activeConvId = c.id;
+  document.querySelectorAll(".conv-item").forEach((el) =>
+    el.classList.toggle("active", el.dataset.convId === c.id)
+  );
+  $("inbox").classList.add("chat-open"); // mobile: show the chat pane
+  $("chat-head").hidden = false;
+  $("chat-peer-name").textContent = convDisplayName(c);
+  $("chat-peer-sub").textContent =
+    (CH_ICON[c.channel] || "") + " " + c.channel + " · " + (c.customer_id || "");
+  const body = $("chat-body");
+  body.innerHTML = '<div class="empty-state">Loading…</div>';
+  try {
+    const d = await api(
+      "/api/conversations/" + encodeURIComponent(c.id) +
+      "/messages?business_id=" + encodeURIComponent(auth.businessId) + "&limit=500"
+    );
+    body.innerHTML = "";
+    (d.messages || []).forEach((m) => {
+      const row = document.createElement("div");
+      row.className = "bubble-row " + (m.role === "assistant" ? "assistant" : "user");
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.textContent = m.content;
+      const time = document.createElement("span");
+      time.className = "bubble-time";
+      time.textContent = m.created_at
+        ? new Date(m.created_at).toLocaleString([], {
+            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+          })
+        : "";
+      bubble.appendChild(time);
+      row.appendChild(bubble);
+      body.appendChild(row);
+    });
+    if (!d.messages || !d.messages.length) {
+      body.innerHTML = '<div class="empty-state">No messages in this conversation.</div>';
+    }
+    body.scrollTop = body.scrollHeight; // jump to the newest message
+  } catch (e) {
+    body.innerHTML = '<div class="empty-state">Error: ' + e.message + "</div>";
+  }
+}
+
+function closeChat() {
+  $("inbox").classList.remove("chat-open");
+}
+
+// ── Logs (activity feed) ─────────────────────────────────────────────────────
+async function loadLogs() {
+  const auth = getAuth();
+  const list = $("log-list");
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
+  try {
+    const d = await api(
+      "/api/logs?business_id=" + encodeURIComponent(auth.businessId) + "&limit=200"
+    );
+    const logs = d.logs || [];
+    $("logs-count").textContent = logs.length + " events";
+    list.innerHTML = "";
+    if (!logs.length) {
+      list.innerHTML =
+        '<div class="empty-state"><div class="empty-icon">📜</div>' +
+        "<p>No activity yet — messages appear here in real time.</p></div>";
+      return;
+    }
+    logs.forEach((l) => {
+      const row = document.createElement("div");
+      row.className = "log-row";
+
+      const time = document.createElement("span");
+      time.className = "log-time";
+      time.textContent = l.created_at
+        ? new Date(l.created_at).toLocaleString([], {
+            day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+          })
+        : "";
+
+      const dir = document.createElement("span");
+      dir.className = "log-dir " + (l.role === "assistant" ? "out" : "in");
+      dir.textContent = l.role === "assistant" ? "OUT" : "IN";
+      dir.title = l.role === "assistant" ? "Assistant reply" : "Customer message";
+
+      const who = document.createElement("span");
+      who.className = "log-who";
+      const ch = document.createElement("span");
+      ch.className = "ch";
+      ch.textContent = CH_ICON[l.channel] || "";
+      who.appendChild(ch);
+      who.appendChild(document.createTextNode(l.customer_name || l.customer_id || ""));
+
+      const preview = document.createElement("span");
+      preview.className = "log-preview";
+      preview.textContent = l.preview || "";
+
+      row.appendChild(time);
+      row.appendChild(dir);
+      row.appendChild(who);
+      row.appendChild(preview);
+      list.appendChild(row);
+    });
+  } catch (e) {
+    list.innerHTML = '<div class="empty-state">Error: ' + e.message + "</div>";
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function boot() {
   fillModelSelect("su-model", "su-model-custom");
   fillModelSelect("p-model", "p-model-custom");
 
-  let pk = "";
+  // An owner session (from Google sign-in, setup, or token login) boots
+  // straight into the app — no network round-trip needed.
+  const auth = getAuth();
+  if (auth && auth.ownerToken) return showAppView();
+
+  let clientId = "";
   try {
     const cfg = await api("/api/public-config");
-    pk = (cfg && cfg.clerk_publishable_key) || "";
-  } catch { /* backend without Clerk support — legacy mode */ }
+    clientId = (cfg && cfg.google_client_id) || "";
+  } catch { /* backend without Google support — legacy mode */ }
 
-  if (pk) {
+  if (clientId) {
     try {
-      _clerk = await loadClerk(pk);
-    } catch (e) {
-      _clerk = null; // widget unreachable — fall back to legacy login
-    }
+      await loadGoogleSignIn(clientId);
+      return showGoogleSignIn();
+    } catch (e) { /* GIS unreachable — fall back to legacy login */ }
   }
 
-  if (_clerk) {
-    // React to sign-in/sign-out happening inside the mounted widget
-    let lastUserId = _clerk.user ? _clerk.user.id : null;
-    _clerk.addListener(({ user }) => {
-      const id = user ? user.id : null;
-      if (id && id !== lastUserId) { lastUserId = id; onClerkSignedIn(); }
-      if (!id) lastUserId = null;
-    });
-    if (_clerk.user) return onClerkSignedIn();
-    // A legacy owner-token session keeps working even with Clerk enabled
-    if (getAuth() && getAuth().ownerToken) return showAppView();
-    return showClerkSignIn();
-  }
-
-  if (getAuth()) showAppView();
-  else showAuthView();
+  showAuthView();
 }
 
 boot();

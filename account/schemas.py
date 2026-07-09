@@ -18,3 +18,7 @@ class ReplaceApiKeyRequest(BaseModel):
 class LinkBusinessRequest(BaseModel):
     business_id: str
     owner_token: str = Field(min_length=8, max_length=200)
+
+
+class GoogleSignInRequest(BaseModel):
+    credential: str = Field(min_length=20, max_length=4000)

@@ -10,19 +10,20 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from aipa.config import get_settings
 
 from aipa.core.auth import verify_owner
-from aipa.core.clerk import verify_clerk_token
 from aipa.core.encryption import encrypt_api_key
+from aipa.core.google_auth import verify_google_bearer, verify_google_credential
 from aipa.db.queries.api_keys import get_api_key_meta
 from aipa.db.queries.boss_config import get_boss_config
 from aipa.db.queries.businesses import (
     get_business,
-    get_business_by_clerk_user,
-    link_clerk_user,
+    get_business_by_google_user,
+    link_google_user,
 )
 from aipa.db.queries.channels import list_channels
 from aipa.db.queries.setup import save_api_key, save_boss_config
 from aipa.dependencies import get_db, get_fernet
 from aipa.account.schemas import (
+    GoogleSignInRequest,
     LinkBusinessRequest,
     ReplaceApiKeyRequest,
     UpdateConfigRequest,
@@ -81,20 +82,32 @@ async def _nudge_waha_awake() -> None:
 @router.get("/public-config")
 async def public_config() -> dict:
     """Unauthenticated bootstrap config for the SPA (public values only)."""
-    return {"clerk_publishable_key": get_settings().CLERK_PUBLISHABLE_KEY}
+    return {"google_client_id": get_settings().GOOGLE_CLIENT_ID}
 
 
-@router.get("/auth/my-business")
-async def my_business(
+@router.post("/auth/google")
+async def google_sign_in(
+    payload: GoogleSignInRequest,
     pool=Depends(get_db),
-    authorization: str | None = Header(default=None),
 ) -> dict:
-    """The business linked to the signed-in Clerk user, if any."""
-    clerk_user_id = await verify_clerk_token(authorization)
-    row = await get_business_by_clerk_user(pool, clerk_user_id)
+    """Sign in with Google: verify the one-time ID token and, when a
+    business is linked to this Google account, return its owner session.
+    The Google token is used once and never stored."""
+    claims = await verify_google_credential(payload.credential)
+    row = await get_business_by_google_user(pool, claims["sub"])
+    if row is None:
+        return {"ok": True, "linked": False, "email": claims.get("email", "")}
+
+    logger.info("google_sign_in", business_id=str(row["id"]))
     return {
         "ok": True,
-        "business": {"id": str(row["id"]), "name": row["name"]} if row else None,
+        "linked": True,
+        "email": claims.get("email", ""),
+        "business": {
+            "id": str(row["id"]),
+            "name": row["name"],
+            "owner_token": row["owner_token"],
+        },
     }
 
 
@@ -105,12 +118,12 @@ async def link_business(
     authorization: str | None = Header(default=None),
 ) -> dict:
     """One-time migration: bind an existing owner-token business to the
-    signed-in Clerk user. Afterwards the owner token is only a backup."""
-    clerk_user_id = await verify_clerk_token(authorization)
+    signed-in Google account. Afterwards Google sign-in is enough."""
+    google_user_id = await verify_google_bearer(authorization)
     business_id = _validate_uuid(payload.business_id, "business_id")
     await verify_owner(pool, business_id, payload.owner_token)
 
-    outcome = await link_clerk_user(pool, business_id, clerk_user_id)
+    outcome = await link_google_user(pool, business_id, google_user_id)
     if outcome == "business_taken":
         raise HTTPException(
             status_code=409, detail="This business is already linked to another account"
@@ -121,7 +134,7 @@ async def link_business(
         )
 
     business = await get_business(pool, business_id)
-    logger.info("clerk_business_linked", business_id=business_id)
+    logger.info("google_business_linked", business_id=business_id)
     return {
         "ok": True,
         "business": {"id": business_id, "name": business["name"] if business else ""},

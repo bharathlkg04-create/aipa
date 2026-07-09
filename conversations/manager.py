@@ -72,7 +72,7 @@ async def _process_inbound(
 
     try:
         conversation_id = await get_or_create_conversation(
-            pool, business_id, channel_id, customer_id
+            pool, business_id, channel_id, customer_id, customer_name
         )
 
         await save_message(pool, conversation_id, role="user", content=user_text)

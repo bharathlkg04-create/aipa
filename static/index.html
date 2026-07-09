@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=12" />
+  <link rel="stylesheet" href="/static/style.css?v=13" />
 </head>
 <body>
 
@@ -22,10 +22,11 @@
   <div id="auth-user-bar" class="form-msg ok" style="text-align:center;" hidden></div>
 
   <div class="auth-cards">
-    <div class="card auth-card" id="card-clerk" hidden>
-      <h2>Sign in or create an account</h2>
-      <div id="clerk-mount"></div>
-      <div id="clerk-msg" class="form-msg"></div>
+    <div class="card auth-card" id="card-google" hidden>
+      <h2>Sign in</h2>
+      <p class="channel-desc" style="margin-bottom:14px;">Use your Google account — no extra password to remember.</p>
+      <div id="g-signin"></div>
+      <div id="g-msg" class="form-msg"></div>
     </div>
 
     <div class="card auth-card" id="card-create">
@@ -53,7 +54,7 @@
     </div>
 
     <div class="card auth-card" id="card-login">
-      <h2>I already have an account</h2>
+      <h2>Sign in with owner token</h2>
       <div class="field">
         <label>Business ID</label>
         <input id="li-business" placeholder="xxxxxxxx-xxxx-…" />
@@ -68,8 +69,8 @@
 
     <div class="card auth-card" id="card-link" hidden>
       <h2>Link an existing business</h2>
-      <p class="channel-desc">Made your assistant before sign-in existed? Enter its
-        Business ID and owner token once — from then on you just sign in.</p>
+      <p class="channel-desc">Made your assistant before Google sign-in existed? Enter its
+        Business ID and owner token once — from then on Google sign-in is enough.</p>
       <div class="field">
         <label>Business ID</label>
         <input id="lk-business" placeholder="xxxxxxxx-xxxx-…" />
@@ -84,149 +85,213 @@
   </div>
 </div>
 
-<!-- ══════════ APP VIEW ══════════ -->
-<div id="view-app" class="app-wrap" hidden>
+<!-- ══════════ APP VIEW (sidebar shell) ══════════ -->
+<div id="view-app" class="app-shell" hidden>
 
-  <header class="topbar">
-    <div class="brand">
+  <div class="sidebar-scrim" id="sidebar-scrim" onclick="closeSidebar()"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
       <span class="logo-small">🤖</span>
       <div>
         <div class="brand-name">AI'PA</div>
         <div class="brand-biz" id="biz-name">—</div>
       </div>
     </div>
-    <button class="btn btn-ghost" onclick="signOut()">Sign out</button>
-  </header>
 
-  <nav class="tabs" id="tabs">
-    <button class="tab active" data-tab="skills">⚙️ Skills</button>
-    <button class="tab" data-tab="store">🏪 Skill Store</button>
-    <button class="tab" data-tab="channels">📡 Channels</button>
-    <button class="tab" data-tab="keys">🔑 API Keys</button>
-    <button class="tab" data-tab="personality">👤 Personality</button>
-  </nav>
-
-  <!-- ── Skills ── -->
-  <section class="panel" id="panel-skills">
-    <div class="panel-head">
-      <h2>My Skills <span class="count-pill" id="skills-count"></span></h2>
-      <p>Skills your assistant can use right now. Turn any off, or add more from the Skill Store.</p>
-    </div>
-    <div id="skills-groups"></div>
-    <div id="skills-empty" class="empty-state" hidden>
-      <div class="empty-icon">✨</div>
-      <p>No skills enabled yet.</p>
-      <button class="btn btn-primary" onclick="switchTab('store')">Browse the Skill Store</button>
-    </div>
-  </section>
-
-  <!-- ── Skill Store ── -->
-  <section class="panel" id="panel-store" hidden>
-    <div class="panel-head">
-      <h2>Skill Store <span class="count-pill" id="store-total"></span></h2>
-      <p>Browse and enable skills — each one teaches your assistant a new behaviour.</p>
-    </div>
-    <div class="store-controls">
-      <input id="st-search" placeholder="Search skills… (e.g. booking, refunds, recruiter)" oninput="onStoreSearch()" />
-      <select id="st-industry" onchange="loadStore(true)"><option value="">All industries</option></select>
-      <button class="btn btn-primary" onclick="enablePack()">⚡ Enable starter pack</button>
-    </div>
-    <div class="chips" id="st-chips"></div>
-    <div class="skill-list" id="st-list"></div>
-    <button class="btn btn-ghost btn-block" id="st-more" onclick="loadStore(false)" hidden>Load more</button>
-    <div id="st-msg" class="form-msg"></div>
-  </section>
-
-  <!-- ── Channels ── -->
-  <section class="panel" id="panel-channels" hidden>
-    <div class="panel-head">
-      <h2>Channels</h2>
-      <p>Where customers talk to your assistant.</p>
-    </div>
-
-    <div class="card channel-card">
-      <div class="channel-head">
-        <div class="channel-title"><span class="ch-icon">✈️</span> Telegram</div>
-        <span id="tg-badge" class="badge">—</span>
+    <nav class="side-nav" id="tabs">
+      <button class="nav-group-head open" id="grp-agent" onclick="toggleNavGroup(event)">
+        <span>🧠 Agent Config</span><span class="chev">▾</span>
+      </button>
+      <div class="nav-group" id="nav-group-agent">
+        <button class="tab active" data-tab="skills">⚙️ Skills</button>
+        <button class="tab" data-tab="store">🏪 Skill Store</button>
+        <button class="tab" data-tab="channels">📡 Channels</button>
+        <button class="tab" data-tab="keys">🔑 API Keys</button>
+        <button class="tab" data-tab="personality">👤 Personality</button>
       </div>
-      <div class="channel-body" id="tg-info">Loading…</div>
-    </div>
 
-    <div class="card channel-card">
-      <div class="channel-head">
-        <div class="channel-title"><span class="ch-icon">💬</span> WhatsApp</div>
-        <span id="wa-badge" class="badge">—</span>
-      </div>
-      <div class="channel-body">
-        <p class="channel-desc">Link a WhatsApp number by scanning a QR code with your phone.</p>
-        <div class="btn-row">
-          <button class="btn btn-primary" id="wa-connect-btn" onclick="waConnect()">📱 Connect WhatsApp</button>
-          <button class="btn btn-danger-ghost" onclick="waDisconnect()">Disconnect</button>
+      <div class="nav-label">Inbox</div>
+      <button class="tab" data-tab="conversations">💬 Conversations</button>
+      <button class="tab" data-tab="logs">📜 Logs</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="btn btn-ghost btn-block" onclick="signOut()">Sign out</button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="page-head">
+      <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">☰</button>
+      <h1 id="page-title">Skills</h1>
+    </header>
+
+    <main class="content">
+
+      <!-- ── Skills ── -->
+      <section class="panel" id="panel-skills">
+        <div class="panel-head">
+          <h2>My Skills <span class="count-pill" id="skills-count"></span></h2>
+          <p>Skills your assistant can use right now. Turn any off, or add more from the Skill Store.</p>
         </div>
-        <div id="wa-status" class="form-msg"></div>
-        <div id="wa-qr-wrap" class="qr-box" hidden>
-          <img id="wa-qr" alt="WhatsApp QR code" />
-          <p>WhatsApp → Settings → <b>Linked devices</b> → <b>Link a device</b> → scan</p>
+        <div id="skills-groups"></div>
+        <div id="skills-empty" class="empty-state" hidden>
+          <div class="empty-icon">✨</div>
+          <p>No skills enabled yet.</p>
+          <button class="btn btn-primary" onclick="switchTab('store')">Browse the Skill Store</button>
         </div>
-      </div>
-    </div>
-  </section>
+      </section>
 
-  <!-- ── API Keys ── -->
-  <section class="panel" id="panel-keys" hidden>
-    <div class="panel-head">
-      <h2>API Keys</h2>
-      <p>Your assistant runs on your own LLM key (BYOK). Keys are encrypted at rest and never shown again.</p>
-    </div>
-    <div class="card">
-      <div class="kv-row"><span>Current provider</span><b id="key-provider">—</b></div>
-      <div class="kv-row"><span>Key added</span><b id="key-date">—</b></div>
-    </div>
-    <div class="card">
-      <h3>Replace key</h3>
-      <div class="field">
-        <label>New LLM API key</label>
-        <input id="key-new" type="password" placeholder="sk-..." />
-      </div>
-      <button class="btn btn-primary" onclick="replaceKey()">Save new key</button>
-      <div id="key-msg" class="form-msg"></div>
-    </div>
-  </section>
+      <!-- ── Skill Store ── -->
+      <section class="panel" id="panel-store" hidden>
+        <div class="panel-head">
+          <h2>Skill Store <span class="count-pill" id="store-total"></span></h2>
+          <p>Browse and enable skills — each one teaches your assistant a new behaviour.</p>
+        </div>
+        <div class="store-controls">
+          <input id="st-search" placeholder="Search skills… (e.g. booking, refunds, recruiter)" oninput="onStoreSearch()" />
+          <select id="st-industry" onchange="loadStore(true)"><option value="">All industries</option></select>
+          <button class="btn btn-primary" onclick="enablePack()">⚡ Enable starter pack</button>
+        </div>
+        <div class="chips" id="st-chips"></div>
+        <div class="skill-list" id="st-list"></div>
+        <button class="btn btn-ghost btn-block" id="st-more" onclick="loadStore(false)" hidden>Load more</button>
+        <div id="st-msg" class="form-msg"></div>
+      </section>
 
-  <!-- ── Personality ── -->
-  <section class="panel" id="panel-personality" hidden>
-    <div class="panel-head">
-      <h2>Personality</h2>
-      <p>How your assistant thinks and talks.</p>
-    </div>
-    <div class="card">
-      <div class="field">
-        <label>Model</label>
-        <select id="p-model" class="model-select"></select>
-        <input id="p-model-custom" placeholder="e.g. mistral/mistral-small-latest" hidden />
-      </div>
-      <div class="field">
-        <label>Creativity (temperature): <b id="p-temp-val">0.7</b></label>
-        <input id="p-temp" type="range" min="0" max="1.5" step="0.1" value="0.7"
-               oninput="document.getElementById('p-temp-val').textContent = this.value" />
-        <div class="range-labels"><span>Precise</span><span>Creative</span></div>
-      </div>
-      <div class="field">
-        <label>Timezone <span class="hint">(so your assistant knows the local date &amp; time)</span></label>
-        <select id="p-timezone" class="model-select"></select>
-      </div>
-      <div class="field">
-        <label>Personality &amp; instructions <span class="hint">(system prompt)</span></label>
-        <textarea id="p-prompt" rows="6"
-          placeholder="You are the friendly assistant for {business}. Be warm, concise, and always offer to book an appointment."></textarea>
-      </div>
-      <button class="btn btn-primary" onclick="savePersonality()">Save personality</button>
-      <div id="p-msg" class="form-msg"></div>
-    </div>
-  </section>
+      <!-- ── Channels ── -->
+      <section class="panel" id="panel-channels" hidden>
+        <div class="panel-head">
+          <h2>Channels</h2>
+          <p>Where customers talk to your assistant.</p>
+        </div>
 
+        <div class="card channel-card">
+          <div class="channel-head">
+            <div class="channel-title"><span class="ch-icon">✈️</span> Telegram</div>
+            <span id="tg-badge" class="badge">—</span>
+          </div>
+          <div class="channel-body" id="tg-info">Loading…</div>
+        </div>
+
+        <div class="card channel-card">
+          <div class="channel-head">
+            <div class="channel-title"><span class="ch-icon">💬</span> WhatsApp</div>
+            <span id="wa-badge" class="badge">—</span>
+          </div>
+          <div class="channel-body">
+            <p class="channel-desc">Link a WhatsApp number by scanning a QR code with your phone.</p>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="wa-connect-btn" onclick="waConnect()">📱 Connect WhatsApp</button>
+              <button class="btn btn-danger-ghost" onclick="waDisconnect()">Disconnect</button>
+            </div>
+            <div id="wa-status" class="form-msg"></div>
+            <div id="wa-qr-wrap" class="qr-box" hidden>
+              <img id="wa-qr" alt="WhatsApp QR code" />
+              <p>WhatsApp → Settings → <b>Linked devices</b> → <b>Link a device</b> → scan</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── API Keys ── -->
+      <section class="panel" id="panel-keys" hidden>
+        <div class="panel-head">
+          <h2>API Keys</h2>
+          <p>Your assistant runs on your own LLM key (BYOK). Keys are encrypted at rest and never shown again.</p>
+        </div>
+        <div class="card">
+          <div class="kv-row"><span>Current provider</span><b id="key-provider">—</b></div>
+          <div class="kv-row"><span>Key added</span><b id="key-date">—</b></div>
+        </div>
+        <div class="card">
+          <h3>Replace key</h3>
+          <div class="field">
+            <label>New LLM API key</label>
+            <input id="key-new" type="password" placeholder="sk-..." />
+          </div>
+          <button class="btn btn-primary" onclick="replaceKey()">Save new key</button>
+          <div id="key-msg" class="form-msg"></div>
+        </div>
+      </section>
+
+      <!-- ── Personality ── -->
+      <section class="panel" id="panel-personality" hidden>
+        <div class="panel-head">
+          <h2>Personality</h2>
+          <p>How your assistant thinks and talks.</p>
+        </div>
+        <div class="card">
+          <div class="field">
+            <label>Model</label>
+            <select id="p-model" class="model-select"></select>
+            <input id="p-model-custom" placeholder="e.g. mistral/mistral-small-latest" hidden />
+          </div>
+          <div class="field">
+            <label>Creativity (temperature): <b id="p-temp-val">0.7</b></label>
+            <input id="p-temp" type="range" min="0" max="1.5" step="0.1" value="0.7"
+                   oninput="document.getElementById('p-temp-val').textContent = this.value" />
+            <div class="range-labels"><span>Precise</span><span>Creative</span></div>
+          </div>
+          <div class="field">
+            <label>Timezone <span class="hint">(so your assistant knows the local date &amp; time)</span></label>
+            <select id="p-timezone" class="model-select"></select>
+          </div>
+          <div class="field">
+            <label>Personality &amp; instructions <span class="hint">(system prompt)</span></label>
+            <textarea id="p-prompt" rows="6"
+              placeholder="You are the friendly assistant for {business}. Be warm, concise, and always offer to book an appointment."></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="savePersonality()">Save personality</button>
+          <div id="p-msg" class="form-msg"></div>
+        </div>
+      </section>
+
+      <!-- ── Conversations ── -->
+      <section class="panel" id="panel-conversations" hidden>
+        <div class="panel-head">
+          <h2>Conversations <span class="count-pill" id="conv-count"></span></h2>
+          <p>Every customer chat across Telegram and WhatsApp — click one to read the full history.</p>
+        </div>
+        <div class="inbox card" id="inbox">
+          <div class="conv-list" id="conv-list">
+            <div class="empty-state">Loading…</div>
+          </div>
+          <div class="conv-chat" id="conv-chat">
+            <div class="chat-head" id="chat-head" hidden>
+              <button class="btn btn-ghost chat-back" onclick="closeChat()">←</button>
+              <div class="chat-peer">
+                <div class="chat-peer-name" id="chat-peer-name">—</div>
+                <div class="chat-peer-sub" id="chat-peer-sub">—</div>
+              </div>
+            </div>
+            <div class="chat-body" id="chat-body">
+              <div class="empty-state">
+                <div class="empty-icon">💬</div>
+                <p>Select a conversation to read it.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Logs ── -->
+      <section class="panel" id="panel-logs" hidden>
+        <div class="panel-head">
+          <h2>Logs <span class="count-pill" id="logs-count"></span></h2>
+          <p>Latest message activity across all channels — incoming customer messages and your assistant's replies.</p>
+        </div>
+        <div class="log-list card" id="log-list">
+          <div class="empty-state">Loading…</div>
+        </div>
+        <button class="btn btn-ghost btn-block" onclick="loadLogs()">↻ Refresh</button>
+      </section>
+
+    </main>
+  </div>
 </div>
 
-<script src="/static/app.js?v=10"></script>
+<script src="/static/app.js?v=13"></script>
 </body>
 </html>
