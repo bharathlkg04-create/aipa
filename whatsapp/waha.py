@@ -152,6 +152,25 @@ async def send_text(session: str, chat_id: str, text: str) -> None:
         )
 
 
+async def start_typing(session: str, chat_id: str) -> None:
+    """Show the 'typing…' presence to the customer while the reply is generated."""
+    resp = await _request(
+        "POST", "/api/startTyping",
+        json={"session": session, "chatId": chat_id},
+    )
+    if resp.status_code >= 400:
+        raise WahaError(f"WAHA startTyping failed (HTTP {resp.status_code}).")
+
+
+async def stop_typing(session: str, chat_id: str) -> None:
+    resp = await _request(
+        "POST", "/api/stopTyping",
+        json={"session": session, "chatId": chat_id},
+    )
+    if resp.status_code >= 400:
+        raise WahaError(f"WAHA stopTyping failed (HTTP {resp.status_code}).")
+
+
 async def logout_session(session: str) -> None:
     """Unlink the device and stop the session (safe to call when already stopped)."""
     resp = await _request("POST", f"/api/sessions/{session}/logout")

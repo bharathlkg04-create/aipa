@@ -23,6 +23,15 @@ async def get_bot_info(bot_token: str) -> dict | None:
     }
 
 
+async def send_typing_action(bot_token: str, chat_id: int) -> None:
+    """Show 'typing…' in the chat. Telegram clears it after ~5s or when a
+    message arrives, so callers refresh it while the reply is generated."""
+    url = f"https://api.telegram.org/bot{bot_token}/sendChatAction"
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        resp = await client.post(url, json={"chat_id": chat_id, "action": "typing"})
+        resp.raise_for_status()
+
+
 async def send_telegram_message(
     bot_token: str,
     chat_id: int,
