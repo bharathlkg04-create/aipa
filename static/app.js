@@ -903,14 +903,16 @@ async function savePersonality() {
 
 // ── Conversations (inbox) ────────────────────────────────────────────────────
 const CH_ICON = { telegram: "✈️", whatsapp: "💬" };
+const CH_LABEL = { telegram: "Telegram", whatsapp: "WhatsApp" };
 let _activeConvId = null;
+let _allConvos = [];
 
 function convDisplayName(c) {
   if (c.customer_name) return c.customer_name;
   const id = c.customer_id || "";
   // WhatsApp ids are unreadable raw; show a human label until the contact's
   // display name arrives with their next message.
-  if (id.endsWith("@newsletter")) return "📰 Channel …" + id.slice(-15, -11);
+  if (id.endsWith("@newsletter")) return "Channel …" + id.slice(-15, -11);
   if (id.endsWith("@lid")) return "Customer …" + id.slice(-8, -4);
   if (id.endsWith("@c.us")) return "+" + id.slice(0, -5);
   return id || "Unknown";
@@ -934,19 +936,29 @@ async function loadConversations() {
     const d = await api(
       "/api/conversations?business_id=" + encodeURIComponent(auth.businessId) + "&limit=100"
     );
-    const convos = d.conversations || [];
-    $("conv-count").textContent = convos.length + (convos.length === 1 ? " chat" : " chats");
-    list.innerHTML = "";
-    if (!convos.length) {
-      list.innerHTML =
-        '<div class="empty-state"><div class="empty-icon">📭</div>' +
-        "<p>No conversations yet.<br>They appear here as soon as a customer messages your assistant.</p></div>";
-      return;
-    }
-    convos.forEach((c) => list.appendChild(renderConvItem(c)));
+    _allConvos = d.conversations || [];
+    renderConvList();
   } catch (e) {
     list.innerHTML = '<div class="empty-state">Error: ' + e.message + "</div>";
   }
+}
+
+function renderConvList() {
+  const list = $("conv-list");
+  const filter = $("conv-filter").value;
+  const convos = filter ? _allConvos.filter((c) => c.channel === filter) : _allConvos;
+  $("conv-count").textContent = convos.length + (convos.length === 1 ? " chat" : " chats");
+  list.innerHTML = "";
+  if (!convos.length) {
+    list.innerHTML =
+      '<div class="empty-state"><div class="empty-icon">📭</div>' +
+      (filter && _allConvos.length
+        ? "<p>No " + (CH_LABEL[filter] || filter) + " conversations yet.</p>"
+        : "<p>No conversations yet.<br>They appear here as soon as a customer messages your assistant.</p>") +
+      "</div>";
+    return;
+  }
+  convos.forEach((c) => list.appendChild(renderConvItem(c)));
 }
 
 function renderConvItem(c) {
@@ -955,8 +967,9 @@ function renderConvItem(c) {
   item.dataset.convId = c.id;
 
   const avatar = document.createElement("div");
-  avatar.className = "conv-avatar";
-  avatar.textContent = convDisplayName(c).charAt(0).toUpperCase();
+  const isNews = (c.customer_id || "").endsWith("@newsletter");
+  avatar.className = "conv-avatar " + (isNews ? "av-news" : "av-" + (c.channel || "x"));
+  avatar.textContent = isNews ? "📰" : convDisplayName(c).charAt(0).toUpperCase();
 
   const meta = document.createElement("div");
   meta.className = "conv-meta";
@@ -1052,16 +1065,31 @@ async function loadLogs() {
     const d = await api(
       "/api/logs?business_id=" + encodeURIComponent(auth.businessId) + "&limit=200"
     );
-    const logs = d.logs || [];
-    $("logs-count").textContent = logs.length + " events";
-    list.innerHTML = "";
-    if (!logs.length) {
-      list.innerHTML =
-        '<div class="empty-state"><div class="empty-icon">📜</div>' +
-        "<p>No activity yet — messages appear here in real time.</p></div>";
-      return;
-    }
-    logs.forEach((l) => {
+    _allLogs = d.logs || [];
+    renderLogList();
+  } catch (e) {
+    list.innerHTML = '<div class="empty-state">Error: ' + e.message + "</div>";
+  }
+}
+
+let _allLogs = [];
+
+function renderLogList() {
+  const list = $("log-list");
+  const filter = $("log-filter").value;
+  const logs = filter ? _allLogs.filter((l) => l.channel === filter) : _allLogs;
+  $("logs-count").textContent = logs.length + " events";
+  list.innerHTML = "";
+  if (!logs.length) {
+    list.innerHTML =
+      '<div class="empty-state"><div class="empty-icon">📜</div>' +
+      (filter && _allLogs.length
+        ? "<p>No " + (CH_LABEL[filter] || filter) + " activity yet.</p>"
+        : "<p>No activity yet — messages appear here in real time.</p>") +
+      "</div>";
+    return;
+  }
+  logs.forEach((l) => {
       const row = document.createElement("div");
       row.className = "log-row";
 
@@ -1095,10 +1123,7 @@ async function loadLogs() {
       row.appendChild(who);
       row.appendChild(preview);
       list.appendChild(row);
-    });
-  } catch (e) {
-    list.innerHTML = '<div class="empty-state">Error: ' + e.message + "</div>";
-  }
+  });
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
