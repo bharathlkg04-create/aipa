@@ -161,20 +161,28 @@ function _authCards(visible) {
   });
 }
 
+function togglePw(inputId, btn) {
+  const el = $(inputId);
+  el.type = el.type === "password" ? "text" : "password";
+  btn.style.opacity = el.type === "password" ? "" : "1";
+}
+
 function showAuthView() {
   $("view-auth").hidden = false;
   $("view-app").hidden = true;
   $("auth-user-bar").hidden = true;
-  _authCards(["card-create", "card-login"]); // legacy mode
+  $("auth-sub").textContent = "Sign in to your account";
+  _authCards(["card-login", "card-create"]); // legacy mode
 }
 
 function showGoogleSignIn() {
   $("view-auth").hidden = false;
   $("view-app").hidden = true;
   $("auth-user-bar").hidden = true;
-  _authCards(["card-google", "card-login"]);
+  $("auth-sub").textContent = "Sign in to your account";
+  _authCards(["card-login", "card-google"]);
   google.accounts.id.renderButton($("g-signin"), {
-    theme: "outline", size: "large", shape: "pill", width: 280,
+    theme: "outline", size: "large", shape: "rect", width: 376, text: "continue_with",
   });
 }
 
@@ -182,6 +190,7 @@ function showOnboarding(email) {
   // Signed in with Google but no business yet: create one or link one.
   $("view-auth").hidden = false;
   $("view-app").hidden = true;
+  $("auth-sub").textContent = "Set up your assistant";
   const bar = $("auth-user-bar");
   bar.hidden = false;
   bar.textContent = "✓ Signed in" + (email ? " as " + email : "") +

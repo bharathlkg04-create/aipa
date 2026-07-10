@@ -7,24 +7,41 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=16" />
+  <link rel="stylesheet" href="/static/style.css?v=17" />
 </head>
 <body>
 
 <!-- ══════════ AUTH VIEW ══════════ -->
 <div id="view-auth" class="auth-wrap" hidden>
   <div class="auth-hero">
-    <div class="logo-big">🤖</div>
-    <h1>AI'PA</h1>
-    <p>Deploy an AI assistant for your business on Telegram &amp; WhatsApp — with your own LLM key.</p>
+    <div class="auth-brand">
+      <span class="logo-big">🤖</span>
+      <h1>AI'PA</h1>
+    </div>
+    <p class="auth-sub" id="auth-sub">Sign in to your account</p>
   </div>
 
   <div id="auth-user-bar" class="form-msg ok" style="text-align:center;" hidden></div>
 
   <div class="auth-cards">
-    <div class="card auth-card" id="card-google" hidden>
-      <h2>Sign in</h2>
-      <p class="channel-desc" style="margin-bottom:14px;">Use your Google account — no extra password to remember.</p>
+    <div class="card auth-card" id="card-login">
+      <div class="field">
+        <label>Business ID</label>
+        <input id="li-business" placeholder="xxxxxxxx-xxxx-…" />
+      </div>
+      <div class="field">
+        <label>Owner token</label>
+        <div class="pw-wrap">
+          <input id="li-owner" type="password" placeholder="Shown once at setup" />
+          <button type="button" class="pw-eye" onclick="togglePw('li-owner', this)" aria-label="Show token">👁</button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" id="li-btn" onclick="doLogin()">Sign In</button>
+      <div id="li-msg" class="form-msg"></div>
+    </div>
+
+    <div id="card-google" hidden>
+      <div class="or-divider"><span>OR</span></div>
       <div id="g-signin"></div>
       <div id="g-msg" class="form-msg"></div>
     </div>
@@ -51,20 +68,6 @@
       </div>
       <button class="btn btn-primary" id="su-btn" onclick="doSetup()">⚡ Create &amp; Connect</button>
       <div id="su-msg" class="form-msg"></div>
-    </div>
-
-    <div class="card auth-card" id="card-login">
-      <h2>Sign in with owner token</h2>
-      <div class="field">
-        <label>Business ID</label>
-        <input id="li-business" placeholder="xxxxxxxx-xxxx-…" />
-      </div>
-      <div class="field">
-        <label>Owner token</label>
-        <input id="li-owner" type="password" placeholder="Shown once at setup" />
-      </div>
-      <button class="btn btn-primary" id="li-btn" onclick="doLogin()">Sign in</button>
-      <div id="li-msg" class="form-msg"></div>
     </div>
 
     <div class="card auth-card" id="card-link" hidden>
@@ -306,6 +309,6 @@
   </div>
 </div>
 
-<script src="/static/app.js?v=15"></script>
+<script src="/static/app.js?v=17"></script>
 </body>
 </html>

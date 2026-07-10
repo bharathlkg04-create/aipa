@@ -53,19 +53,32 @@ h1, h2, h3, .brand-name {
 }
 a { color: hsl(var(--foreground)); text-underline-offset: 3px; }
 
-/* ── Auth view ── */
-.auth-wrap { max-width: 960px; margin: 0 auto; padding: 64px 24px; }
-.auth-hero { text-align: center; margin-bottom: 48px; }
-.logo-big { font-size: 48px; }
-.auth-hero h1 { font-size: 36px; font-weight: 700; letter-spacing: -0.04em; margin: 8px 0; }
-.auth-hero p { color: hsl(var(--muted-foreground)); max-width: 460px; margin: 0 auto; font-size: 15px; }
-.auth-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-  align-items: start;
-}
+/* ── Auth view: single centered column (logo → fields → OR → Google) ── */
+.auth-wrap { max-width: 440px; margin: 0 auto; padding: 88px 24px 64px; }
+.auth-hero { text-align: center; margin-bottom: 28px; }
+.auth-brand { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.logo-big { font-size: 36px; }
+.auth-hero h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+.auth-sub { color: hsl(var(--muted-foreground)); font-size: 15px; margin-top: 6px; }
+.auth-cards { display: flex; flex-direction: column; gap: 18px; }
 .auth-card h2 { font-size: 16px; margin-bottom: 16px; }
+.or-divider {
+  display: flex; align-items: center; gap: 14px;
+  color: hsl(var(--subtle-foreground));
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+  margin: 2px 0 14px;
+}
+.or-divider::before, .or-divider::after {
+  content: ""; flex: 1; height: 1px; background: hsl(var(--border));
+}
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 40px; }
+.pw-eye {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  font-size: 15px; padding: 4px 6px; opacity: 0.55;
+}
+.pw-eye:hover { opacity: 1; }
 #g-signin { display: flex; justify-content: center; padding: 6px 0; }
 
 /* ── App shell: sidebar + main ── */
