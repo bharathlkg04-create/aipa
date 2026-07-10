@@ -3,28 +3,28 @@
    follows the shadcn dashboard pattern (left sidebar + content area). */
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  /* Claude.ai-inspired palette: warm ivory surfaces, coral primary */
+  --background: 48 33% 97%;
+  --foreground: 60 3% 11%;
   --card: 0 0% 100%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --subtle-foreground: 240 4% 62%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  /* Chakra UI-style teal primary (teal.600) */
-  --primary: 179 45% 32%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --accent: 240 4.8% 95.9%;
+  --muted: 49 23% 93%;
+  --muted-foreground: 45 4% 42%;
+  --subtle-foreground: 45 5% 55%;
+  --border: 45 12% 86%;
+  --input: 45 12% 84%;
+  --primary: 15 56% 56%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 49 23% 93%;
+  --secondary-foreground: 60 3% 15%;
+  --accent: 48 20% 91%;
   --destructive: 0 72.2% 50.6%;
   --destructive-soft: 0 86% 97%;
   --success: 142 71% 29%;
   --success-soft: 141 79% 94%;
   --warning: 35 92% 33%;
   --warning-soft: 48 96% 92%;
-  --ring: 179 51% 39%;
-  --radius: 0.5rem;
+  --ring: 15 56% 56%;
+  --radius: 0.75rem;
   --sidebar-w: 248px;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
@@ -47,7 +47,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 { letter-spacing: -0.025em; font-weight: 600; }
+h1, h2, h3, .brand-name {
+  font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+  letter-spacing: -0.01em; font-weight: 600;
+}
 a { color: hsl(var(--foreground)); text-underline-offset: 3px; }
 
 /* ── Auth view ── */
@@ -139,9 +142,9 @@ a { color: hsl(var(--foreground)); text-underline-offset: 3px; }
 }
 .side-nav .tab:hover { color: hsl(var(--foreground)); background: hsl(var(--accent)); }
 .side-nav .tab.active {
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  box-shadow: var(--shadow-sm);
+  background: hsl(48 14% 86%);
+  color: hsl(var(--foreground));
+  box-shadow: none;
 }
 
 .sidebar-foot { padding: 12px; border-top: 1px solid hsl(var(--border)); }
@@ -352,13 +355,13 @@ input[type="range"]:focus { box-shadow: none; }
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary {
-  background: linear-gradient(180deg, hsl(179 48% 40%), hsl(var(--primary)) 55%);
+  background: linear-gradient(180deg, hsl(15 60% 61%), hsl(var(--primary)) 55%);
   color: hsl(var(--primary-foreground));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), var(--shadow-sm);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), var(--shadow-sm);
 }
 .btn-primary:hover {
-  background: linear-gradient(180deg, hsl(179 48% 45%), hsl(179 45% 27%) 55%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 4px 12px -2px hsl(179 45% 32% / 0.4);
+  background: linear-gradient(180deg, hsl(15 60% 65%), hsl(15 56% 50%) 55%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 4px 12px -2px hsl(15 56% 56% / 0.4);
 }
 /* shine sweep across primary buttons on hover */
 .btn-primary::after {
