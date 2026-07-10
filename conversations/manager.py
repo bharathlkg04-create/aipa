@@ -124,10 +124,12 @@ async def process_telegram_message(
     bot_token: str = channel["channel_token"]
     chat_id: int = msg.chat.id
 
-    # The customer's Telegram account name, e.g. "Bharath (@bharath_k)"
+    # The customer's full Telegram account name, e.g. "Bharath Kumar (@bharath_k)"
     customer_name = None
     if msg.from_user is not None:
         customer_name = msg.from_user.first_name
+        if msg.from_user.last_name:
+            customer_name += f" {msg.from_user.last_name}"
         if msg.from_user.username:
             customer_name += f" (@{msg.from_user.username})"
 

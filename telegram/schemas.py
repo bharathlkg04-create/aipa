@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class TelegramUser(BaseModel):
     id: int
     first_name: str
+    last_name: str | None = None
     username: str | None = None
 
 
