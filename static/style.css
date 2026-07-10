@@ -31,6 +31,11 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* The hidden attribute must always win, even over display:flex/grid rules
+   (author display rules silently override the browser's [hidden] default —
+   this is what let the auth view and app shell render stacked together). */
+[hidden] { display: none !important; }
+
 body {
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   background: hsl(var(--background));
