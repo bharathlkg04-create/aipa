@@ -2,7 +2,17 @@ import secrets
 
 from fastapi import HTTPException
 
+from aipa.db.queries.accounts import get_account_by_token
 from aipa.db.queries.businesses import get_owner_token
+
+
+async def get_account_by_bearer(pool, authorization: str | None):
+    """The account row for an `Authorization: Bearer acct_…` header, or
+    None when the header is absent or carries a different kind of token
+    (e.g. a Google ID token)."""
+    if not authorization or not authorization.lower().startswith("bearer acct_"):
+        return None
+    return await get_account_by_token(pool, authorization.split(" ", 1)[1].strip())
 
 
 async def verify_owner(

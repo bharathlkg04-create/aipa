@@ -12,6 +12,15 @@ function getAuth() {
 function setAuth(a) { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); }
 function clearAuth() { localStorage.removeItem(AUTH_KEY); }
 
+// Email/password account session ("acct_…" bearer token)
+const ACCT_KEY = "aipa_acct";
+function getAcct() {
+  try { return JSON.parse(localStorage.getItem(ACCT_KEY)) || null; }
+  catch { return null; }
+}
+function setAcct(a) { localStorage.setItem(ACCT_KEY, JSON.stringify(a)); }
+function clearAcct() { localStorage.removeItem(ACCT_KEY); }
+
 function $(id) { return document.getElementById(id); }
 
 function msg(id, kind, text) {
@@ -77,7 +86,9 @@ async function onGoogleCredential(response) {
 // must use this, never build auth headers by hand.
 async function authHeaders() {
   const headers = {};
+  const acct = getAcct();
   if (_googleCred) headers["Authorization"] = "Bearer " + _googleCred;
+  else if (acct && acct.token) headers["Authorization"] = "Bearer " + acct.token;
   const auth = getAuth();
   if (auth && auth.ownerToken) headers["X-Owner-Token"] = auth.ownerToken;
   return headers;
@@ -155,8 +166,11 @@ function setModel(selectId, customId, model) {
 }
 
 // ── Views & tabs ─────────────────────────────────────────────────────────────
+let _googleOn = false; // GIS configured & loaded — show the Google button
+
 function _authCards(visible) {
-  ["card-google", "card-create", "card-login", "card-link"].forEach((id) => {
+  ["card-google", "card-create", "card-login", "card-link",
+   "card-signup", "card-signin"].forEach((id) => {
     $(id).hidden = !visible.includes(id);
   });
 }
@@ -167,24 +181,32 @@ function togglePw(inputId, btn) {
   btn.style.opacity = el.type === "password" ? "" : "1";
 }
 
-function showAuthView() {
-  $("view-auth").hidden = false;
-  $("view-app").hidden = true;
-  $("auth-user-bar").hidden = true;
-  $("auth-sub").textContent = "Sign in to your account";
-  _authCards(["card-login", "card-create"]); // legacy mode
-}
-
-function showGoogleSignIn() {
-  $("view-auth").hidden = false;
-  $("view-app").hidden = true;
-  $("auth-user-bar").hidden = true;
-  $("auth-sub").textContent = "Sign in to your account";
-  _authCards(["card-login", "card-google"]);
+function _renderGoogleBtn() {
+  if (!_googleOn) return;
+  // Real GIS button sits invisibly over our own "Sign in with Google" —
+  // full visual control, so Google can never swap in "Continue as …".
+  $("g-signin").innerHTML = "";
   google.accounts.id.renderButton($("g-signin"), {
-    theme: "outline", size: "large", shape: "rect", width: 376, text: "continue_with",
+    theme: "outline", size: "large", shape: "rect", width: 400, text: "signin_with",
   });
 }
+
+function _showAuth(sub, cards, withGoogle) {
+  $("view-auth").hidden = false;
+  $("view-app").hidden = true;
+  $("auth-user-bar").hidden = true;
+  $("auth-sub").textContent = sub;
+  if (withGoogle && _googleOn) cards = cards.concat(["card-google"]);
+  _authCards(cards);
+  if (withGoogle) _renderGoogleBtn();
+}
+
+function showSignUp() { _showAuth("Create your account", ["card-signup"], true); }
+function showSignIn() { _showAuth("Sign in to your account", ["card-signin"], true); }
+function showTokenLogin() { _showAuth("Sign in with owner token", ["card-login"], false); }
+
+// Legacy alias (older code paths call this on sign-out / fallbacks)
+function showAuthView() { showSignUp(); }
 
 function showOnboarding(email) {
   // Signed in with Google but no business yet: create one or link one.
@@ -273,6 +295,7 @@ function closeSidebar() {
 function signOut() {
   waStopPolling();
   clearAuth();
+  clearAcct();
   _account = null;
   _googleCred = null;
   if (_googleReady) {
@@ -351,6 +374,61 @@ async function doSetup() {
     }
   } catch (e) {
     msg("su-msg", "err", "Setup failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doSignup() {
+  const name = $("sg-name").value.trim();
+  const email = $("sg-email").value.trim();
+  const password = $("sg-password").value;
+  if (!name || !email) return msg("sg-msg", "err", "Full name and email are required.");
+  if (password.length < 8) return msg("sg-msg", "err", "Password must be at least 8 characters.");
+
+  const btn = $("sg-btn");
+  btn.disabled = true;
+  msg("sg-msg", "warn", "Creating your account…");
+  try {
+    const d = await api("/api/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({ full_name: name, email: email, password: password }),
+    });
+    setAcct({ token: d.account_token, name: d.account.name, email: d.account.email });
+    showOnboarding(d.account.email);
+  } catch (e) {
+    msg("sg-msg", "err", e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doEmailLogin() {
+  const email = $("si-email").value.trim();
+  const password = $("si-password").value;
+  if (!email || !password) return msg("si-msg", "err", "Both fields are required.");
+
+  const btn = $("si-btn");
+  btn.disabled = true;
+  msg("si-msg", "warn", "Signing in…");
+  try {
+    const d = await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: email, password: password }),
+    });
+    setAcct({ token: d.account_token, name: d.account.name, email: d.account.email });
+    if (d.business) {
+      setAuth({
+        businessId: d.business.id,
+        ownerToken: d.business.owner_token,
+        businessName: d.business.name,
+      });
+      showAppView();
+    } else {
+      showOnboarding(d.account.email);
+    }
+  } catch (e) {
+    msg("si-msg", "err", e.message);
   } finally {
     btn.disabled = false;
   }
@@ -1140,8 +1218,8 @@ async function boot() {
   fillModelSelect("su-model", "su-model-custom");
   fillModelSelect("p-model", "p-model-custom");
 
-  // An owner session (from Google sign-in, setup, or token login) boots
-  // straight into the app — no network round-trip needed.
+  // An owner session (from sign-in, setup, or token login) boots straight
+  // into the app — no network round-trip needed.
   const auth = getAuth();
   if (auth && auth.ownerToken) return showAppView();
 
@@ -1149,16 +1227,33 @@ async function boot() {
   try {
     const cfg = await api("/api/public-config");
     clientId = (cfg && cfg.google_client_id) || "";
-  } catch { /* backend without Google support — legacy mode */ }
+  } catch { /* backend without Google support */ }
 
   if (clientId) {
     try {
       await loadGoogleSignIn(clientId);
-      return showGoogleSignIn();
-    } catch (e) { /* GIS unreachable — fall back to legacy login */ }
+      _googleOn = true;
+    } catch (e) { /* GIS unreachable — email/password still works */ }
   }
 
-  showAuthView();
+  // Restore an email/password session: account exists but which business?
+  const acct = getAcct();
+  if (acct && acct.token) {
+    try {
+      const d = await api("/api/auth/me");
+      if (d.business) {
+        setAuth({
+          businessId: d.business.id,
+          ownerToken: d.business.owner_token,
+          businessName: d.business.name,
+        });
+        return showAppView();
+      }
+      return showOnboarding(d.account.email);
+    } catch { clearAcct(); /* stale token — fall through to sign-up */ }
+  }
+
+  showSignUp();
 }
 
 boot();

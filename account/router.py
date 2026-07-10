@@ -1,4 +1,6 @@
 import asyncio
+import re
+import secrets
 import time
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -9,9 +11,16 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from aipa.config import get_settings
 
-from aipa.core.auth import verify_owner
+from aipa.core.auth import get_account_by_bearer, verify_owner
 from aipa.core.encryption import encrypt_api_key
 from aipa.core.google_auth import verify_google_bearer, verify_google_credential
+from aipa.core.passwords import hash_password, verify_password
+from aipa.db.queries.accounts import (
+    create_account,
+    get_account_by_email,
+    get_business_by_account,
+    link_account,
+)
 from aipa.db.queries.api_keys import get_api_key_meta
 from aipa.db.queries.boss_config import get_boss_config
 from aipa.db.queries.businesses import (
@@ -25,9 +34,13 @@ from aipa.dependencies import get_db, get_fernet
 from aipa.account.schemas import (
     GoogleSignInRequest,
     LinkBusinessRequest,
+    LoginRequest,
     ReplaceApiKeyRequest,
+    SignUpRequest,
     UpdateConfigRequest,
 )
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["account"])
@@ -111,6 +124,71 @@ async def google_sign_in(
     }
 
 
+def _business_payload(row) -> dict | None:
+    if row is None:
+        return None
+    return {"id": str(row["id"]), "name": row["name"], "owner_token": row["owner_token"]}
+
+
+@router.post("/auth/signup")
+async def sign_up(payload: SignUpRequest, pool=Depends(get_db)) -> dict:
+    """Create an email/password account. Returns a bearer session token;
+    the business is created or linked afterwards (onboarding)."""
+    email = payload.email.strip().lower()
+    if not _EMAIL_RE.fullmatch(email):
+        raise HTTPException(status_code=400, detail="That doesn't look like an email address")
+
+    token = "acct_" + secrets.token_urlsafe(24)
+    account_id = await create_account(
+        pool, payload.full_name.strip(), email, hash_password(payload.password), token
+    )
+    if account_id is None:
+        raise HTTPException(
+            status_code=409, detail="An account with this email already exists — sign in instead"
+        )
+    logger.info("account_created", account_id=account_id)
+    return {
+        "ok": True,
+        "account_token": token,
+        "account": {"name": payload.full_name.strip(), "email": email},
+        "business": None,
+    }
+
+
+@router.post("/auth/login")
+async def log_in(payload: LoginRequest, pool=Depends(get_db)) -> dict:
+    account = await get_account_by_email(pool, payload.email.strip())
+    if account is None or not verify_password(payload.password, account["password_hash"]):
+        raise HTTPException(status_code=401, detail="Wrong email or password")
+
+    business = await get_business_by_account(pool, str(account["id"]))
+    logger.info("account_login", account_id=str(account["id"]))
+    return {
+        "ok": True,
+        "account_token": account["account_token"],
+        "account": {"name": account["full_name"], "email": account["email"]},
+        "business": _business_payload(business),
+    }
+
+
+@router.get("/auth/me")
+async def whoami(
+    pool=Depends(get_db),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """Resolve an account bearer token back to the account and its business
+    (used on page load to restore an email/password session)."""
+    account = await get_account_by_bearer(pool, authorization)
+    if account is None:
+        raise HTTPException(status_code=401, detail="Not signed in")
+    business = await get_business_by_account(pool, str(account["id"]))
+    return {
+        "ok": True,
+        "account": {"name": account["full_name"], "email": account["email"]},
+        "business": _business_payload(business),
+    }
+
+
 @router.post("/auth/link")
 async def link_business(
     payload: LinkBusinessRequest,
@@ -118,12 +196,20 @@ async def link_business(
     authorization: str | None = Header(default=None),
 ) -> dict:
     """One-time migration: bind an existing owner-token business to the
-    signed-in Google account. Afterwards Google sign-in is enough."""
-    google_user_id = await verify_google_bearer(authorization)
+    signed-in account (email/password or Google). Afterwards signing in
+    is enough."""
+    account = await get_account_by_bearer(pool, authorization)
+    google_user_id = None
+    if account is None:
+        google_user_id = await verify_google_bearer(authorization)
+
     business_id = _validate_uuid(payload.business_id, "business_id")
     await verify_owner(pool, business_id, payload.owner_token)
 
-    outcome = await link_google_user(pool, business_id, google_user_id)
+    if account is not None:
+        outcome = await link_account(pool, business_id, str(account["id"]))
+    else:
+        outcome = await link_google_user(pool, business_id, google_user_id)
     if outcome == "business_taken":
         raise HTTPException(
             status_code=409, detail="This business is already linked to another account"

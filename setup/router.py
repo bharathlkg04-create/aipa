@@ -3,8 +3,10 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from aipa.config import get_settings
+from aipa.core.auth import get_account_by_bearer
 from aipa.core.encryption import encrypt_api_key
 from aipa.core.google_auth import google_enabled, verify_google_bearer
+from aipa.db.queries.accounts import link_account
 from aipa.db.queries.businesses import link_google_user
 from aipa.db.queries.setup import (
     get_or_create_business_and_channel,
@@ -39,10 +41,11 @@ async def setup_business(
     fernet = get_fernet()
     settings = get_settings()
 
-    # Resolve the Google user up front so a bad session fails before we
-    # create anything.
+    # Resolve the signed-in identity up front so a bad session fails before
+    # we create anything. Bearer is either an account token or a Google ID token.
+    account = await get_account_by_bearer(pool, authorization)
     google_user_id = None
-    if authorization and google_enabled():
+    if account is None and authorization and google_enabled():
         google_user_id = await verify_google_bearer(authorization)
 
     result = await get_or_create_business_and_channel(
@@ -52,8 +55,11 @@ async def setup_business(
     webhook_secret = result["webhook_secret"]
 
     linked = False
-    if google_user_id:
-        outcome = await link_google_user(pool, business_id, google_user_id)
+    if account is not None or google_user_id:
+        if account is not None:
+            outcome = await link_account(pool, business_id, str(account["id"]))
+        else:
+            outcome = await link_google_user(pool, business_id, google_user_id)
         if outcome == "business_taken":
             raise HTTPException(
                 status_code=409,
