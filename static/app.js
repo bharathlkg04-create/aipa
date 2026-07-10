@@ -906,7 +906,14 @@ const CH_ICON = { telegram: "✈️", whatsapp: "💬" };
 let _activeConvId = null;
 
 function convDisplayName(c) {
-  return c.customer_name || c.customer_id || "Unknown";
+  if (c.customer_name) return c.customer_name;
+  const id = c.customer_id || "";
+  // WhatsApp ids are unreadable raw; show a human label until the contact's
+  // display name arrives with their next message.
+  if (id.endsWith("@newsletter")) return "📰 Channel …" + id.slice(-15, -11);
+  if (id.endsWith("@lid")) return "Customer …" + id.slice(-8, -4);
+  if (id.endsWith("@c.us")) return "+" + id.slice(0, -5);
+  return id || "Unknown";
 }
 
 function fmtTime(iso) {
@@ -1077,7 +1084,7 @@ async function loadLogs() {
       ch.className = "ch";
       ch.textContent = CH_ICON[l.channel] || "";
       who.appendChild(ch);
-      who.appendChild(document.createTextNode(l.customer_name || l.customer_id || ""));
+      who.appendChild(document.createTextNode(convDisplayName(l)));
 
       const preview = document.createElement("span");
       preview.className = "log-preview";
