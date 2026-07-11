@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -66,6 +67,15 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if get_settings().ENVIRONMENT != "production" else None,
     redoc_url=None,
+)
+
+# The React dashboard is served from Vercel (and vite dev locally); auth is
+# header-token based (no cookies), so no credentials are involved.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+",
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(health_router)
